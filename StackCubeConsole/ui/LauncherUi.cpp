@@ -192,8 +192,8 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
     group = lv_group_create();
     settingsPanel = panel(root, Width, Height - 49, 0, 49, Background);
     lv_obj_set_pos(label(settingsPanel, "Settings", &lv_font_montserrat_20, Text), 22, 13);
-    save = button(settingsPanel, "Save", 78, 182, 252);
-    back = button(settingsPanel, "Back", 78, 270, 252);
+    save = button(settingsPanel, "Save", 78, 182, 255);
+    back = button(settingsPanel, "Back", 78, 270, 255);
     lv_obj_add_event_cb(save, [](lv_event_t* event) {
         static_cast<LauncherUi*>(lv_event_get_user_data(event))->saving = true;
     }, LV_EVENT_CLICKED, this);
@@ -249,23 +249,28 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
         static_cast<LauncherUi*>(lv_event_get_user_data(event))->updateCities();
     }, LV_EVENT_VALUE_CHANGED, this);
 
-    lv_obj_set_pos(label(settingsPanel, "Volume", &lv_font_montserrat_14, Text), 22, 222);
-    volume = lv_slider_create(settingsPanel);
-    lv_obj_set_pos(volume, 182, 226);
-    lv_obj_set_size(volume, 224, 9);
-    lv_slider_set_range(volume, 0, MaxAudioVolume);
-    lv_obj_set_style_bg_color(volume, lv_color_hex(Line), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(volume, lv_color_hex(Accent), LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(volume, lv_color_hex(Text), LV_PART_KNOB);
-    lv_obj_set_style_outline_color(volume, lv_color_hex(Accent), LV_STATE_FOCUSED);
-    lv_obj_set_style_outline_width(volume, 2, LV_STATE_FOCUSED);
-    volumeValue = label(settingsPanel, "", &lv_font_montserrat_14, Text);
-    lv_obj_set_pos(volumeValue, 420, 222);
-    lv_obj_add_event_cb(volume, [](lv_event_t* event) {
-        auto* ui = static_cast<LauncherUi*>(lv_event_get_user_data(event));
-        lv_label_set_text_fmt(ui->volumeValue, "%d%%", int(lv_slider_get_value(ui->volume)));
-    }, LV_EVENT_VALUE_CHANGED, this);
-    lv_group_add_obj(group, volume);
+    constexpr const char* volumeLabels[] = {"Master volume", "Music volume", "Effects volume"};
+    for (unsigned i = 0; i < std::size(volumeControls); ++i) {
+        auto& control = volumeControls[i];
+        const int x = 22 + 198 * i;
+        lv_obj_set_pos(label(settingsPanel, volumeLabels[i], &lv_font_montserrat_14, Text), x, 216);
+        control.value = label(settingsPanel, "", &lv_font_montserrat_14, Text);
+        lv_obj_set_pos(control.value, x + 133, 216);
+        auto* slider = control.slider = lv_slider_create(settingsPanel);
+        lv_obj_set_pos(slider, x + 3, 237);
+        lv_obj_set_size(slider, 157, 8);
+        lv_slider_set_range(slider, 0, MaxAudioVolume);
+        lv_obj_set_style_bg_color(slider, lv_color_hex(Line), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(slider, lv_color_hex(Accent), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(slider, lv_color_hex(Text), LV_PART_KNOB);
+        lv_obj_set_style_outline_color(slider, lv_color_hex(Accent), LV_STATE_FOCUSED);
+        lv_obj_set_style_outline_width(slider, 2, LV_STATE_FOCUSED);
+        lv_obj_add_event_cb(slider, [](lv_event_t* event) {
+            auto* control = static_cast<VolumeControl*>(lv_event_get_user_data(event));
+            lv_label_set_text_fmt(control->value, "%d%%", int(lv_slider_get_value(control->slider)));
+        }, LV_EVENT_VALUE_CHANGED, &control);
+        lv_group_add_obj(group, slider);
+    }
 
     lv_group_add_obj(group, save);
     lv_group_add_obj(group, back);
@@ -317,8 +322,12 @@ void LauncherUi::showSettings(bool show) {
     for (unsigned i = 0; i < std::size(AudioOptions); ++i) {
         if (AudioOptions[i] == settings.audioOutput) lv_dropdown_set_selected(audio, i);
     }
-    lv_slider_set_value(volume, settings.audioVolume, LV_ANIM_OFF);
-    lv_event_send(volume, LV_EVENT_VALUE_CHANGED, nullptr);
+    const uint8_t levels[] = {settings.audioLevels.master, settings.audioLevels.music, settings.audioLevels.effects};
+    for (unsigned i = 0; i < std::size(volumeControls); ++i) {
+        auto* slider = volumeControls[i].slider;
+        lv_slider_set_value(slider, levels[i], LV_ANIM_OFF);
+        lv_event_send(slider, LV_EVENT_VALUE_CHANGED, nullptr);
+    }
     lv_label_set_text(settingsStatus, mounted ? "" : "Insert an SD card to save.");
     lv_obj_clear_flag(settingsPanel, LV_OBJ_FLAG_HIDDEN);
     lv_group_focus_obj(fields[0]);
@@ -530,14 +539,17 @@ void LauncherUi::handleSettings(const Input& input, uint32_t padButtons) {
     }
 
     const bool selectPressed = enter || (!keyboardVisible && (input.pressed & padButtons & Accept));
-    if (focused == volume && !keyboardVisible) {
+    if (!keyboardVisible) {
         const auto pressed = input.pressed & padButtons;
         const bool left = input.key == 0x50 || (pressed & Left);
         const bool right = input.key == 0x4f || (pressed & Right);
         if (left != right) {
-            lv_slider_set_value(volume, lv_slider_get_value(volume) + (right ? VolumeStep : -VolumeStep), LV_ANIM_OFF);
-            lv_event_send(volume, LV_EVENT_VALUE_CHANGED, nullptr);
-            return;
+            for (const auto& control : volumeControls) {
+                if (focused != control.slider) continue;
+                lv_slider_set_value(focused, lv_slider_get_value(focused) + (right ? VolumeStep : -VolumeStep), LV_ANIM_OFF);
+                lv_event_send(focused, LV_EVENT_VALUE_CHANGED, nullptr);
+                return;
+            }
         }
     }
     int direction = keyboardVisible ? 0 : directionOf(input.pressed & padButtons);
@@ -617,9 +629,9 @@ int LauncherUi::takeGame() {
 bool LauncherUi::takeSettings(Settings& result) {
     if (!saving) return false;
     saving = false;
-    result = {lv_textarea_get_text(fields[0]), lv_textarea_get_text(fields[1]),
-              selectedTimeZone(), AudioOptions[lv_dropdown_get_selected(audio)],
-              uint8_t(lv_slider_get_value(volume))};
+    const auto level = [this](unsigned index) { return uint8_t(lv_slider_get_value(volumeControls[index].slider)); };
+    result = {lv_textarea_get_text(fields[0]), lv_textarea_get_text(fields[1]), selectedTimeZone(),
+              AudioOptions[lv_dropdown_get_selected(audio)], {level(0), level(1), level(2)}};
     return true;
 }
 

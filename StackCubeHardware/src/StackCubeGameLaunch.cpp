@@ -17,9 +17,9 @@ bool validGameFolder(const String& folder) {
     return strcmp(leaf, ".") && strcmp(leaf, "..") && !strpbrk(leaf, "/\\:");
 }
 
-uint8_t loadVolume(Preferences& preferences, const char* key) {
-    const uint8_t volume = preferences.getUChar(key, MaxAudioVolume);
-    return volume <= MaxAudioVolume ? volume : MaxAudioVolume;
+uint8_t loadVolume(Preferences& preferences, const char* key, uint8_t fallback) {
+    const uint8_t volume = preferences.getUChar(key, fallback);
+    return volume <= MaxAudioVolume ? volume : fallback;
 }
 }
 
@@ -59,8 +59,10 @@ bool GameLaunch::load() {
     if (!validGameFolder(path)) return false;
     folder = path;
     audioOutput = parseAudioOutput(record.substring(0, separator).c_str());
-    audioLevels = {loadVolume(preferences, VolumeKey), loadVolume(preferences, MusicVolumeKey),
-                   loadVolume(preferences, EffectsVolumeKey)};
+    constexpr AudioLevels defaults;
+    audioLevels = {loadVolume(preferences, VolumeKey, defaults.master),
+                   loadVolume(preferences, MusicVolumeKey, defaults.music),
+                   loadVolume(preferences, EffectsVolumeKey, defaults.effects)};
     return true;
 }
 

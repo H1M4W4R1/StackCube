@@ -35,13 +35,15 @@ bool readSettings(const char* path, Settings& settings) {
     JsonDocument json;
     if (!file || file.isDirectory() || file.size() > 2048 ||
         deserializeJson(json, file, DeserializationOption::NestingLimit(3))) return false;
-    const auto level = [&json](const char* key) {
+    const auto level = [&json](const char* key, uint8_t fallback) {
         const int maximum = stackcube::MaxAudioVolume;
-        return uint8_t(std::clamp(json[key] | maximum, 0, maximum));
+        return uint8_t(std::clamp(json[key] | int(fallback), 0, maximum));
     };
+    constexpr stackcube::AudioLevels defaults;
     Settings candidate = {json["ssid"] | "", json["password"] | "", json["timezone"] | "Etc/UTC",
                           stackcube::parseAudioOutput(json["audio_output"] | "speaker"),
-                          {level("audio_volume"), level("music_volume"), level("effects_volume")}};
+                          {level("audio_volume", defaults.master), level("music_volume", defaults.music),
+                           level("effects_volume", defaults.effects)}};
     if (!valid(candidate)) return false;
     settings = std::move(candidate);
     return true;

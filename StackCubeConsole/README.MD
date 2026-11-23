@@ -52,7 +52,7 @@ Select **Settings** after the last game in the carousel. F2 and the controller's
 
 Set the Wi-Fi SSID and password, select a region and city (for example, **Europe** and **Warsaw**), then select **Save**. Leave the SSID blank to disable Wi-Fi. The time-zone list uses the IANA 2026f database and includes daylight saving rules.
 
-Set **Audio output** to **Built-in speaker**, **HDMI**, or **Off**. Adjust **Volume** with the mouse or focus the slider and press Left or Right. Select **Save** to apply your choices the next time you launch a rebuilt game. **0%** mutes audio and keeps the chosen output in Settings. Cards without audio settings default to the built-in speaker at 100%. Games read audio assets from the same SD folder as their binary.
+Set **Audio output** to **Built-in speaker**, **HDMI**, or **Off**. Set **Master volume**, **Music volume**, and **Effects volume** with the mouse, or focus a slider and press Left or Right. Master controls the overall level. Set a slider to **0%** to mute the corresponding audio. Select **Save** to apply your choices the next time you launch a rebuilt game. Missing settings default to **Master 100%, Music 10%, and Effects 25%**. Games read audio assets from the same SD folder as their binary.
 
 The launcher creates `/settings/settings.json` when it mounts a card without that file. It carries over valid settings from an earlier `/settings/console.json`. An existing custom POSIX rule stays active until you choose a region and city. Wi-Fi credentials are stored in plain text on the card. The console synchronizes the CoreS3 RTC over NTP when connected. An unset clock displays `--:--`.
 
@@ -68,5 +68,5 @@ The launcher creates `/settings/settings.json` when it mounts a card without tha
 
 1. Save **Built-in speaker**, launch Snake, and collect food. Listen for the pickup sound over the music on the CoreS3.
 2. Repeat with **HDMI** on a display or receiver that supports HDMI audio.
-3. Set **Volume** to 50%, save, and relaunch Snake. Confirm that both music and effects are quieter.
-4. Set **Volume** to 0%, save, and relaunch Snake. Confirm that the game is silent and Settings still shows the selected output. Repeat with **Off** to check the output toggle.
+3. Use the default **Music volume** of 10% and **Effects volume** of 25%. Let Snake hit a wall and listen for the collision over the music.
+4. Set **Master volume** to 0%, save, and relaunch Snake. Confirm that the game is silent and Settings still shows the selected output.

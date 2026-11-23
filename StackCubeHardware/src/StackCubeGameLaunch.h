@@ -9,8 +9,8 @@ constexpr uint8_t MaxAudioVolume = 100;
 
 struct AudioLevels {
     uint8_t master = MaxAudioVolume;
-    uint8_t music = MaxAudioVolume;
-    uint8_t effects = MaxAudioVolume;
+    uint8_t music = 10;
+    uint8_t effects = 25;
 
     bool audible() const { return master && (music || effects); }
     bool valid() const {
