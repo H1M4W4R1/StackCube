@@ -20,9 +20,14 @@ void flush(lv_disp_drv_t* driver, const lv_area_t* area, lv_color_t* pixels) {
 
 bool beginLvglDisplay() {
     constexpr size_t bufferPixels = stackcube::hal::Width * 20;
-    auto* pixels = static_cast<lv_color_t*>(heap_caps_malloc(bufferPixels * sizeof(lv_color_t),
-                                                             MALLOC_CAP_DMA));
-    if (!pixels) return false;
+    constexpr size_t bufferBytes = bufferPixels * sizeof(lv_color_t);
+    constexpr auto dma = MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA;
+    auto* pixels = static_cast<lv_color_t*>(heap_caps_malloc(bufferBytes, dma));
+    if (!pixels) {
+        Serial.printf("LVGL DMA allocation failed: %zu requested, %zu free, %zu largest block (bytes)\n",
+                      bufferBytes, heap_caps_get_free_size(dma), heap_caps_get_largest_free_block(dma));
+        return false;
+    }
     stackcube::hal::display().setColorDepth(16);
     lv_init();
     static lv_disp_draw_buf_t buffer;

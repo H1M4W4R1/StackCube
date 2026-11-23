@@ -3,6 +3,7 @@
 
 #include <M5ModuleDisplay.h>
 #include <M5Unified.h>
+#include <esp_heap_caps.h>
 #include <esp32-hal-spi.h>
 
 namespace stackcube::hal {
@@ -34,6 +35,14 @@ void beginBoard() {
     M5.begin(config);
     M5.Display.sleep();
     SPI.begin(Sck, Miso, Mosi, SdCs);
+
+    constexpr auto psram = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+    constexpr auto dma = MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA;
+    Serial.printf("PSRAM: %zu total, %zu free, %zu largest block (bytes)\n",
+                  heap_caps_get_total_size(psram), heap_caps_get_free_size(psram),
+                  heap_caps_get_largest_free_block(psram));
+    Serial.printf("Internal DMA heap: %zu free, %zu largest block (bytes)\n",
+                  heap_caps_get_free_size(dma), heap_caps_get_largest_free_block(dma));
 }
 
 bool beginPeripherals() {
