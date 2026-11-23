@@ -124,7 +124,6 @@ void LauncherUi::begin() {
 }
 
 void LauncherUi::makeHome(lv_obj_t* root) {
-    lv_obj_set_pos(label(root, "StackCube", &lv_font_montserrat_20, Text), 22, 14);
     auto* statusIcons = panel(root, LV_SIZE_CONTENT, lv_font_montserrat_16.line_height, 0, 0, Background);
     lv_obj_align(statusIcons, LV_ALIGN_TOP_RIGHT, -79, 17);
     lv_obj_set_flex_flow(statusIcons, LV_FLEX_FLOW_ROW);
@@ -180,8 +179,8 @@ void LauncherUi::makeHome(lv_obj_t* root) {
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 253);
-    position = label(root, "", &lv_font_montserrat_12, Muted);
-    lv_obj_align(position, LV_ALIGN_TOP_MID, 0, 292);
+    mediaStatus = label(root, "", &lv_font_montserrat_12, Muted);
+    lv_obj_align(mediaStatus, LV_ALIGN_TOP_MID, 0, 292);
     panel(root, Width - 44, 1, 22, 314, Line);
     help = label(root, LV_SYMBOL_LEFT "  " LV_SYMBOL_RIGHT "  Browse     Enter / A  Select", &lv_font_montserrat_12, Muted);
     lv_obj_set_pos(help, 22, 334);
@@ -374,17 +373,16 @@ void LauncherUi::updateCards() {
         card.index = index;
         updateCard(card);
     }
-    if (size_t(selected) < catalog.size()) {
-        lv_label_set_text(title, catalog[selected].title.c_str());
-        lv_label_set_text_fmt(position, "%u / %u", unsigned(selected + 1), unsigned(catalog.size()));
-    } else {
-        lv_label_set_text(title, "Settings");
-        const char* status = "";
+    const bool gameSelected = size_t(selected) < catalog.size();
+    lv_label_set_text(title, gameSelected ? catalog[selected].title.c_str() : "Settings");
+
+    const char* status = "";
+    if (!gameSelected) {
         if (cardUnreadable) status = "SD card could not be mounted";
         else if (!mounted) status = "Insert an SD card to load games";
         else if (!catalog.size()) status = "Copy game folders to /games";
-        lv_label_set_text(position, status);
     }
+    lv_label_set_text(mediaStatus, status);
 }
 
 void LauncherUi::updateCard(Card& card) {

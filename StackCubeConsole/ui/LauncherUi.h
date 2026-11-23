@@ -51,7 +51,7 @@ private:
     BoxArt covers;
     Card cards[5] = {};
     lv_obj_t* title = nullptr;
-    lv_obj_t* position = nullptr;
+    lv_obj_t* mediaStatus = nullptr;
     lv_obj_t* help = nullptr;
     lv_obj_t* sdIcon = nullptr;
     lv_obj_t* mouseIcon = nullptr;
