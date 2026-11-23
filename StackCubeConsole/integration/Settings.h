@@ -8,6 +8,7 @@ struct Settings {
     String password;
     String timezone = "Etc/UTC";
     stackcube::AudioOutput audioOutput = stackcube::AudioOutput::Speaker;
+    stackcube::AudioLevels audioLevels;
 };
 
 class NetworkClock {

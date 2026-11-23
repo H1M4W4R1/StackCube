@@ -66,6 +66,8 @@ private:
     lv_obj_t* region = nullptr;
     lv_obj_t* city = nullptr;
     lv_obj_t* audio = nullptr;
+    lv_obj_t* volume = nullptr;
+    lv_obj_t* volumeValue = nullptr;
     lv_obj_t* save = nullptr;
     lv_obj_t* back = nullptr;
     lv_obj_t* keyboard = nullptr;

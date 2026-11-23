@@ -18,6 +18,7 @@ constexpr uint32_t Muted = 0xA4B6C4;
 constexpr uint32_t Accent = 0xF5BF74;
 constexpr uint32_t Green = 0x86D9B2;
 constexpr AudioOutput AudioOptions[] = {AudioOutput::Speaker, AudioOutput::Hdmi, AudioOutput::Off};
+constexpr int VolumeStep = 5;
 
 // One-bit opacity masks, stored as two bytes per 16-pixel row.
 constexpr uint8_t MousePixels[] = {
@@ -191,8 +192,8 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
     group = lv_group_create();
     settingsPanel = panel(root, Width, Height - 49, 0, 49, Background);
     lv_obj_set_pos(label(settingsPanel, "Settings", &lv_font_montserrat_20, Text), 22, 13);
-    save = button(settingsPanel, "Save", 78, 182, 224);
-    back = button(settingsPanel, "Back", 78, 270, 224);
+    save = button(settingsPanel, "Save", 78, 182, 252);
+    back = button(settingsPanel, "Back", 78, 270, 252);
     lv_obj_add_event_cb(save, [](lv_event_t* event) {
         static_cast<LauncherUi*>(lv_event_get_user_data(event))->saving = true;
     }, LV_EVENT_CLICKED, this);
@@ -247,10 +248,29 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
     lv_obj_add_event_cb(region, [](lv_event_t* event) {
         static_cast<LauncherUi*>(lv_event_get_user_data(event))->updateCities();
     }, LV_EVENT_VALUE_CHANGED, this);
+
+    lv_obj_set_pos(label(settingsPanel, "Volume", &lv_font_montserrat_14, Text), 22, 222);
+    volume = lv_slider_create(settingsPanel);
+    lv_obj_set_pos(volume, 182, 226);
+    lv_obj_set_size(volume, 224, 9);
+    lv_slider_set_range(volume, 0, MaxAudioVolume);
+    lv_obj_set_style_bg_color(volume, lv_color_hex(Line), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(volume, lv_color_hex(Accent), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(volume, lv_color_hex(Text), LV_PART_KNOB);
+    lv_obj_set_style_outline_color(volume, lv_color_hex(Accent), LV_STATE_FOCUSED);
+    lv_obj_set_style_outline_width(volume, 2, LV_STATE_FOCUSED);
+    volumeValue = label(settingsPanel, "", &lv_font_montserrat_14, Text);
+    lv_obj_set_pos(volumeValue, 420, 222);
+    lv_obj_add_event_cb(volume, [](lv_event_t* event) {
+        auto* ui = static_cast<LauncherUi*>(lv_event_get_user_data(event));
+        lv_label_set_text_fmt(ui->volumeValue, "%d%%", int(lv_slider_get_value(ui->volume)));
+    }, LV_EVENT_VALUE_CHANGED, this);
+    lv_group_add_obj(group, volume);
+
     lv_group_add_obj(group, save);
     lv_group_add_obj(group, back);
     settingsStatus = label(settingsPanel, "", &lv_font_montserrat_12, Muted);
-    lv_obj_set_pos(settingsStatus, 182, 268);
+    lv_obj_set_pos(settingsStatus, 182, 292);
 
     keyboard = lv_keyboard_create(settingsPanel);
     lv_obj_set_size(keyboard, Width, 123);
@@ -297,6 +317,8 @@ void LauncherUi::showSettings(bool show) {
     for (unsigned i = 0; i < std::size(AudioOptions); ++i) {
         if (AudioOptions[i] == settings.audioOutput) lv_dropdown_set_selected(audio, i);
     }
+    lv_slider_set_value(volume, settings.audioVolume, LV_ANIM_OFF);
+    lv_event_send(volume, LV_EVENT_VALUE_CHANGED, nullptr);
     lv_label_set_text(settingsStatus, mounted ? "" : "Insert an SD card to save.");
     lv_obj_clear_flag(settingsPanel, LV_OBJ_FLAG_HIDDEN);
     lv_group_focus_obj(fields[0]);
@@ -508,6 +530,16 @@ void LauncherUi::handleSettings(const Input& input, uint32_t padButtons) {
     }
 
     const bool selectPressed = enter || (!keyboardVisible && (input.pressed & padButtons & Accept));
+    if (focused == volume && !keyboardVisible) {
+        const auto pressed = input.pressed & padButtons;
+        const bool left = input.key == 0x50 || (pressed & Left);
+        const bool right = input.key == 0x4f || (pressed & Right);
+        if (left != right) {
+            lv_slider_set_value(volume, lv_slider_get_value(volume) + (right ? VolumeStep : -VolumeStep), LV_ANIM_OFF);
+            lv_event_send(volume, LV_EVENT_VALUE_CHANGED, nullptr);
+            return;
+        }
+    }
     int direction = keyboardVisible ? 0 : directionOf(input.pressed & padButtons);
     if (input.key == 0x52 || (!textField && input.key == 0x50)) direction = -1;
     if (input.key == 0x51 || (!textField && input.key == 0x4f)) direction = 1;
@@ -586,7 +618,8 @@ bool LauncherUi::takeSettings(Settings& result) {
     if (!saving) return false;
     saving = false;
     result = {lv_textarea_get_text(fields[0]), lv_textarea_get_text(fields[1]),
-              selectedTimeZone(), AudioOptions[lv_dropdown_get_selected(audio)]};
+              selectedTimeZone(), AudioOptions[lv_dropdown_get_selected(audio)],
+              uint8_t(lv_slider_get_value(volume))};
     return true;
 }
 

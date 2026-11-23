@@ -20,6 +20,7 @@ constexpr time_t ValidClock = 1704067200; // 2024-01-01 UTC
 
 bool valid(const Settings& settings) {
     if (settings.ssid.length() > 32 || settings.password.length() > 64 ||
+        !settings.audioLevels.valid() ||
         settings.timezone.length() == 0 || settings.timezone.length() > 95) return false;
     if (timezones::find(settings.timezone.c_str()) >= 0) return true;
     // Existing cards may carry a user-supplied POSIX rule.
@@ -34,8 +35,13 @@ bool readSettings(const char* path, Settings& settings) {
     JsonDocument json;
     if (!file || file.isDirectory() || file.size() > 2048 ||
         deserializeJson(json, file, DeserializationOption::NestingLimit(3))) return false;
+    const auto level = [&json](const char* key) {
+        const int maximum = stackcube::MaxAudioVolume;
+        return uint8_t(std::clamp(json[key] | maximum, 0, maximum));
+    };
     Settings candidate = {json["ssid"] | "", json["password"] | "", json["timezone"] | "Etc/UTC",
-                          stackcube::parseAudioOutput(json["audio_output"] | "speaker")};
+                          stackcube::parseAudioOutput(json["audio_output"] | "speaker"),
+                          {level("audio_volume"), level("music_volume"), level("effects_volume")}};
     if (!valid(candidate)) return false;
     settings = std::move(candidate);
     return true;
@@ -83,6 +89,9 @@ bool NetworkClock::save(const Settings& settings) const {
     json["password"] = settings.password;
     json["timezone"] = settings.timezone;
     json["audio_output"] = stackcube::audioOutputName(settings.audioOutput);
+    json["audio_volume"] = settings.audioLevels.master;
+    json["music_volume"] = settings.audioLevels.music;
+    json["effects_volume"] = settings.audioLevels.effects;
     File file = SD.open(Temporary, FILE_WRITE);
     if (!file) return false;
     const bool written = serializeJson(json, file) == measureJson(json);
@@ -90,7 +99,7 @@ bool NetworkClock::save(const Settings& settings) const {
     Settings check;
     if (!written || !readSettings(Temporary, check) || check.ssid != settings.ssid ||
         check.password != settings.password || check.timezone != settings.timezone ||
-        check.audioOutput != settings.audioOutput) return false;
+        check.audioOutput != settings.audioOutput || !(check.audioLevels == settings.audioLevels)) return false;
     if (SD.exists(Path)) {
         Settings previous;
         if (readSettings(Path, previous)) {

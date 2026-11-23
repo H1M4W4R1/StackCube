@@ -18,6 +18,10 @@ constexpr size_t MaxEffectBytes = WavFile::SampleRate * 2 * sizeof(int16_t);
 constexpr int MusicChannel = 0;
 constexpr unsigned EffectVoices = 4;
 constexpr unsigned CachedEffects = 8;
+constexpr int MusicLevel = 255;
+constexpr int DuckedMusicLevel = 128;
+constexpr int EffectLevel = 190;
+constexpr uint32_t EffectTailMs = 30;
 
 using Samples = std::unique_ptr<int16_t, decltype(&heap_caps_free)>;
 
@@ -28,6 +32,7 @@ int16_t* allocateSamples(size_t bytes) {
 struct MusicBuffer {
     Samples pcm{nullptr, heap_caps_free};
     std::atomic<bool> playing{false};
+    size_t samples = 0;
 };
 
 struct Effect {
@@ -45,9 +50,18 @@ WavFile music;
 char requestedMusic[NameCapacity];
 char currentMusic[NameCapacity];
 bool stopMusic;
-std::array<MusicBuffer, 2> musicBuffers;
+// M5Unified owns up to two blocks. Two more can be filled ahead of playback.
+std::array<MusicBuffer, 4> musicBuffers;
 unsigned nextMusicBuffer;
+unsigned nextMusicPlayback;
+bool musicPrefilled;
 size_t musicFill;
+int musicLevel;
+int normalMusicLevel;
+int duckedMusicLevel;
+bool effectsEnabled;
+uint32_t lastMusicLevelUpdate;
+uint32_t lastEffect;
 
 std::array<Effect, CachedEffects> effects;
 std::array<std::atomic<const int16_t*>, EffectVoices> playingEffects{};
@@ -83,6 +97,32 @@ void closeMusic() {
     music.close();
     currentMusic[0] = '\0';
     musicFill = 0;
+    nextMusicBuffer = nextMusicPlayback = 0;
+    musicPrefilled = false;
+    for (auto& buffer : musicBuffers) buffer.samples = 0;
+}
+
+void queueMusic() {
+    if (!musicPrefilled) {
+        // Start with two complete blocks, including for stereo tracks and slow SD cards.
+        const auto& second = musicBuffers[(nextMusicPlayback + 1) % musicBuffers.size()];
+        if (!second.samples) return;
+        musicPrefilled = true;
+    }
+    while (M5.Speaker.isPlaying(MusicChannel) < 2) {
+        auto& buffer = musicBuffers[nextMusicPlayback];
+        if (!buffer.samples) return;
+        buffer.playing.store(true, std::memory_order_relaxed);
+        if (!M5.Speaker.playRaw(buffer.pcm.get(), buffer.samples, WavFile::SampleRate,
+                                music.stereo(), 1, MusicChannel)) {
+            buffer.playing.store(false, std::memory_order_release);
+            Serial.println("Audio: could not queue background track samples");
+            closeMusic();
+            return;
+        }
+        buffer.samples = 0;
+        nextMusicPlayback = (nextMusicPlayback + 1) % musicBuffers.size();
+    }
 }
 
 // Report whether music used this poll's SD budget.
@@ -97,14 +137,17 @@ bool serviceMusic() {
             closeMusic();
             music = std::move(next);
             strcpy(currentMusic, requestedMusic);
+            Serial.printf("Audio: looping %s\n", currentMusic);
         }
         requestedMusic[0] = '\0';
         return true;
     }
     if (!music) return false;
+    queueMusic();
+    if (!music) return false;
 
     auto& buffer = musicBuffers[nextMusicBuffer];
-    if (buffer.playing.load(std::memory_order_acquire)) return false;
+    if (buffer.samples || buffer.playing.load(std::memory_order_acquire)) return false;
     auto* bytes = reinterpret_cast<uint8_t*>(buffer.pcm.get());
     const size_t blockBytes = MusicFrames * sizeof(int16_t) * (music.stereo() ? 2 : 1);
     // Expand very short loops in RAM, retaining an integer number of repetitions.
@@ -128,16 +171,12 @@ bool serviceMusic() {
             musicFill += copy;
         }
     }
-    // A partial block spanning the loop boundary is completed on the next poll.
+    // A partial block stays staged until the next reads fill it.
     if (musicFill == target) {
-        buffer.playing.store(true, std::memory_order_relaxed);
-        if (!M5.Speaker.playRaw(buffer.pcm.get(), target / sizeof(int16_t), WavFile::SampleRate,
-                                music.stereo(), 1, MusicChannel)) {
-            buffer.playing.store(false, std::memory_order_release);
-            closeMusic();
-        }
+        buffer.samples = target / sizeof(int16_t);
         musicFill = 0;
         nextMusicBuffer = (nextMusicBuffer + 1) % musicBuffers.size();
+        queueMusic();
     }
     return true;
 }
@@ -213,15 +252,17 @@ void loadPendingEffect() {
     if (!effectFile) loadingEffect = nullptr;
 }
 
-void playPendingEffects() {
+void playPendingEffects(uint32_t now) {
     for (auto& effect : effects) {
         if (!effect.ready() || !effect.pending) continue;
         for (unsigned voice = 0; voice < EffectVoices && effect.pending; ++voice) {
             if (playingEffects[voice].load(std::memory_order_acquire)) continue;
             const auto* pcm = effect.pcm.get();
             playingEffects[voice].store(pcm, std::memory_order_relaxed);
-            if (!M5.Speaker.playRaw(pcm, effect.bytes / sizeof(int16_t), WavFile::SampleRate,
-                                    effect.stereo, 1, voice + 1)) {
+            if (M5.Speaker.playRaw(pcm, effect.bytes / sizeof(int16_t), WavFile::SampleRate,
+                                   effect.stereo, 1, voice + 1)) {
+                lastEffect = now;
+            } else {
                 playingEffects[voice].store(nullptr, std::memory_order_release);
             }
             --effect.pending;
@@ -229,16 +270,38 @@ void playPendingEffects() {
         effect.pending = 0;
     }
 }
+
+void updateMusicLevel(uint32_t now) {
+    for (const auto& voice : playingEffects) {
+        if (voice.load(std::memory_order_acquire)) {
+            lastEffect = now;
+            break;
+        }
+    }
+    // The mixer can release a buffer before I2S has played the last samples.
+    const bool effectAudible = now - lastEffect < EffectTailMs;
+    const int elapsed = std::min(now - lastMusicLevelUpdate, uint32_t{128});
+    lastMusicLevelUpdate = now;
+    const int level = effectAudible ? std::max(duckedMusicLevel, musicLevel - 16 * elapsed)
+                                    : std::min(normalMusicLevel, musicLevel + elapsed);
+    if (level != musicLevel) {
+        musicLevel = level;
+        M5.Speaker.setChannelVolume(MusicChannel, musicLevel);
+    }
+}
 }
 
 bool begin(const GameLaunch& launch) {
     if (enabled) return true;
-    if (launch.audioOutput == AudioOutput::Off) return false;
-    for (auto& buffer : musicBuffers) {
-        buffer.pcm.reset(allocateSamples(MusicBufferBytes));
-        if (!buffer.pcm) {
-            end();
-            return false;
+    const auto& levels = launch.audioLevels;
+    if (launch.audioOutput == AudioOutput::Off || !levels.audible()) return false;
+    if (levels.music) {
+        for (auto& buffer : musicBuffers) {
+            buffer.pcm.reset(allocateSamples(MusicBufferBytes));
+            if (!buffer.pcm) {
+                end();
+                return false;
+            }
         }
     }
     auto config = M5.Speaker.config();
@@ -255,12 +318,23 @@ bool begin(const GameLaunch& launch) {
         config.magnification = 16;
     }
     M5.Speaker.config(config);
-    M5.Speaker.setVolume(hdmi ? 85 : 165);
-    M5.Speaker.setChannelVolume(MusicChannel, 175);
+    const unsigned outputGain = hdmi ? 115 : 230;
+    M5.Speaker.setVolume(outputGain * levels.master / MaxAudioVolume);
+    normalMusicLevel = MusicLevel * levels.music / MaxAudioVolume;
+    duckedMusicLevel = DuckedMusicLevel * levels.music / MaxAudioVolume;
+    musicLevel = normalMusicLevel;
+    effectsEnabled = levels.effects != 0;
+    lastMusicLevelUpdate = millis();
+    lastEffect = lastMusicLevelUpdate - EffectTailMs;
+    M5.Speaker.setAllChannelVolume(EffectLevel * levels.effects / MaxAudioVolume);
+    M5.Speaker.setChannelVolume(MusicChannel, musicLevel);
     M5.Speaker.setBufferReleaseCallback(nullptr, releaseBuffer);
     folder = launch.folder;
     enabled = M5.Speaker.begin();
-    if (!enabled) {
+    if (enabled) {
+        Serial.printf("Audio: %s at %u%% (music %u%%, effects %u%%)\n", audioOutputName(launch.audioOutput),
+                      unsigned(levels.master), unsigned(levels.music), unsigned(levels.effects));
+    } else {
         M5.Speaker.end();
         end();
     }
@@ -273,7 +347,6 @@ void end() {
     closeMusic();
     requestedMusic[0] = '\0';
     stopMusic = false;
-    nextMusicBuffer = 0;
     for (auto& buffer : musicBuffers) {
         buffer.playing.store(false, std::memory_order_relaxed);
         buffer.pcm.reset();
@@ -287,12 +360,14 @@ void end() {
 
 void poll() {
     if (!enabled) return;
-    playPendingEffects();
+    const uint32_t now = millis();
+    playPendingEffects(now);
+    updateMusicLevel(now);
     if (!serviceMusic()) loadPendingEffect();
 }
 
 bool preloadSfx(const char* name) {
-    if (!enabled || !validName(name)) return false;
+    if (!enabled || !effectsEnabled || !validName(name)) return false;
     auto* effect = reserveEffect(name);
     if (!effect) return false;
     if (effect->ready()) return true;
@@ -307,7 +382,7 @@ bool preloadSfx(const char* name) {
 }
 
 bool playSfx(const char* name) {
-    if (!enabled || !validName(name)) return false;
+    if (!enabled || !effectsEnabled || !validName(name)) return false;
     auto* effect = reserveEffect(name);
     if (!effect || effect->pending == EffectVoices) return false;
     ++effect->pending;
@@ -315,7 +390,7 @@ bool playSfx(const char* name) {
 }
 
 bool playBgTrack(const char* name) {
-    if (!enabled || !validName(name)) return false;
+    if (!enabled || !normalMusicLevel || !validName(name)) return false;
     stopMusic = false;
     if (!strcasecmp(currentMusic, name)) requestedMusic[0] = '\0';
     else strcpy(requestedMusic, name);

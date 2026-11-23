@@ -13,16 +13,15 @@ Bootloader bootloader;
 NetworkClock network;
 LauncherUi ui(catalog);
 bool displayReady;
-stackcube::AudioOutput audioOutput = stackcube::AudioOutput::Speaker;
+Settings activeSettings;
 
 void updateMedia() {
     const bool mounted = card.mounted();
     if (mounted) catalog.scan();
     else catalog.clear();
-    const auto settings = mounted ? network.loadOrCreate() : Settings{};
-    audioOutput = settings.audioOutput;
-    network.apply(settings);
-    if (displayReady) ui.mediaChanged(card.inserted(), mounted, settings);
+    activeSettings = mounted ? network.loadOrCreate() : Settings{};
+    network.apply(activeSettings);
+    if (displayReady) ui.mediaChanged(card.inserted(), mounted, activeSettings);
 }
 }
 
@@ -61,15 +60,17 @@ void loop() {
         const int game = ui.takeGame();
         if (game >= 0 && card.mounted() && size_t(game) < catalog.size()) {
             const auto& entry = catalog[game];
-            if (bootloader.start(entry.binary.c_str(), {entry.folder, audioOutput})) ui.loading(0);
+            const stackcube::GameLaunch launch{entry.folder, activeSettings.audioOutput, activeSettings.audioLevels};
+            if (bootloader.start(entry.binary.c_str(), launch)) ui.loading(0);
             else ui.launchError(bootloader.error().c_str());
         }
         Settings settings;
         if (ui.takeSettings(settings)) {
             const bool saved = card.mounted() && network.save(settings);
             if (saved) {
-                audioOutput = settings.audioOutput;
-                network.apply(settings);
+                if (settings.ssid != activeSettings.ssid || settings.password != activeSettings.password ||
+                    settings.timezone != activeSettings.timezone) network.apply(settings);
+                activeSettings = settings;
             }
             ui.settingsResult(saved, settings);
         }

@@ -32,8 +32,8 @@ console.play_sfx("pickup.wav");
 ```
 
 - `play_bg_track()` loops one track. Request another file to change tracks, or call `stop_bg_track()` to stop it. Already queued music drains before a switch or stop is audible.
-- `play_sfx()` plays an effect once. Up to four effects can overlap with the music. Extra triggers are dropped when all four effect voices are playing. Keep each effect at or below 192,000 PCM bytes (2 seconds mono or 1 second stereo).
+- `play_sfx()` plays an effect once. Up to four effects can overlap. Music plays more quietly while effects are audible, then returns to its usual level. Extra triggers are dropped when all four effect voices are playing. Keep each effect at or below 192,000 PCM bytes (2 seconds mono or 1 second stereo).
 - `preload_sfx()` loads synchronously and reports whether the effect is ready. Use it in `setup()` or a loading screen. The cache holds up to eight effects and can evict idle clips. A cache miss during gameplay loads the effect in chunks before playing it.
-- `play_bg_track()` and `play_sfx()` report whether the request was accepted. Missing or invalid WAV files are reported over serial during loading. Calls return `false` while sound is off or unavailable.
+- `play_bg_track()` and `play_sfx()` report whether the request was accepted. Missing or invalid WAV files are reported over serial during loading. Calls return `false` while sound is off, volume is 0%, or output is unavailable.
 
-During gameplay, `Console::poll()` services the audio queue with at most one 4 KiB PCM read per call. Continue polling throughout the game and end display transactions first. Poll at least once per 60 Hz frame to supply stereo music. The game loop handles SD access alongside input and display, while the I²S task mixes and plays from memory independently.
+During gameplay, `Console::poll()` services the audio queue with at most one 4 KiB PCM read per call. Four music buffers provide read-ahead across short stalls. Continue polling throughout the game and end display transactions first. Poll at least once per 60 Hz frame to supply stereo music. The game loop handles SD access alongside input and display, while the I²S task mixes and plays from memory independently.

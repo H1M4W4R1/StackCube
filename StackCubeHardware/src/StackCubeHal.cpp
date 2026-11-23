@@ -116,7 +116,7 @@ bool setRumble(uint8_t slot, uint8_t left, uint8_t right) { return usb::setRumbl
 void stopRumble() { usb::stopRumble(); }
 
 void beginGameAudio(const GameLaunch& launch) {
-    if (audioMounted || launch.audioOutput == AudioOutput::Off) return;
+    if (audioMounted || launch.audioOutput == AudioOutput::Off || !launch.audioLevels.audible()) return;
     bool inserted;
     if ((readSdPresence(inserted) && !inserted) || !mountSd()) {
         Serial.println("Audio: game SD card unavailable");
