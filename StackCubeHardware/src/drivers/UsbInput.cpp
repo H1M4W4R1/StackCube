@@ -143,19 +143,82 @@ public:
             if (!result || result == hrNAK) errors = 0;
             else if (errors < ErrorLimit) ++errors;
         }
+        const uint32_t now = millis();
+        if (recovering && now - restartedAt < SessionTimeoutMs && int32_t(now - nextStartup) >= 0) {
+            uint8_t powerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
+            if (!XboxCommand(powerOn, sizeof(powerOn))) finishStartup();
+            nextStartup = millis() + StartupIntervalMs;
+        }
         return result;
     }
 
     uint8_t Release() override {
         errors = 0;
+        oneS = sessionReady = recovering = false;
         return XBOXONE::Release();
     }
 
-    bool needsRecovery() const { return errors == ErrorLimit; }
+    bool acceptsInput() const { return XboxOneConnected && (!oneS || sessionReady); }
+    bool transferFailed() const { return errors == ErrorLimit; }
+    bool sessionTimedOut(uint32_t now) const { return recovering && now - restartedAt >= SessionTimeoutMs; }
+
+protected:
+    uint8_t StartInputSession(uint16_t vendor, uint16_t product) override {
+        oneS = vendor == XBOX_VID1 && product == XBOX_ONE_PID4;
+        sessionReady = recovering = false;
+        if (!oneS) return 0;
+        const auto result = finishStartup();
+        nextStartup = millis() + StartupIntervalMs;
+        return result;
+    }
+
+    void OnInputPacket(const uint8_t* data, uint16_t length) override {
+        if (!oneS || length < 4 || (data[1] & 0x0f)) return;
+        if (data[0] == 0x20 && length >= 18) {
+            markReady();
+        } else if (data[1] & 0x20) {
+            if (data[0] == 0x02 && length >= 20) {
+                restartSession("controller announced itself again");
+            } else if (data[0] == 0x03 && length >= 8) {
+                if (data[4] & 0x80) markReady();
+                else restartSession("controller reported its session closed");
+            }
+        }
+    }
 
 private:
     static constexpr uint8_t ErrorLimit = 3;
+    static constexpr uint32_t StartupIntervalMs = 400;
+    static constexpr uint32_t SessionTimeoutMs = 3000;
     uint8_t errors = 0;
+    bool oneS = false, sessionReady = false, recovering = false;
+    uint32_t restartedAt = 0, nextStartup = 0;
+
+    uint8_t finishStartup() {
+        // Xbox One S wired start commands from Linux xpad, excluding rumble.
+        uint8_t wiredMode[] = {0x05, 0x20, 0x00, 0x0f, 0x06};
+        uint8_t ledOn[] = {0x0a, 0x20, 0x00, 0x03, 0x00, 0x01, 0x14};
+        uint8_t authDone[] = {0x06, 0x20, 0x00, 0x02, 0x01, 0x00};
+        uint8_t result = XboxCommand(wiredMode, sizeof(wiredMode));
+        if (!result) result = XboxCommand(ledOn, sizeof(ledOn));
+        if (!result) result = XboxCommand(authDone, sizeof(authDone));
+        return result;
+    }
+
+    void restartSession(const char* reason) {
+        if (recovering) return;
+        ResetInputState();
+        sessionReady = false;
+        recovering = true;
+        restartedAt = millis();
+        Serial.printf("Xbox One S input restart: %s\n", reason);
+    }
+
+    void markReady() {
+        if (!sessionReady) Serial.println("Xbox One S input ready");
+        sessionReady = true;
+        recovering = false;
+    }
 };
 
 XboxOnePad xboxOne;
@@ -209,8 +272,10 @@ void serviceHost() {
         if (state == USB_STATE_ERROR || state == USB_DETACHED_SUBSTATE_ILLEGAL ||
             (enumerating && now - stateSince >= EnumerationTimeoutMs)) {
             failure = "enumeration failed";
-        } else if (xboxOne.needsRecovery() || secondXboxOne.needsRecovery()) {
+        } else if (xboxOne.transferFailed() || secondXboxOne.transferFailed()) {
             failure = "Xbox input transfer failed";
+        } else if (xboxOne.sessionTimedOut(now) || secondXboxOne.sessionTimedOut(now)) {
+            failure = "Xbox One S input session timed out";
         } else {
             return;
         }
@@ -254,8 +319,8 @@ const Input& poll() {
     serviceHost();
 
     const PadSource sources[] = {
-        {&xboxOne, xboxState(xboxOne, xboxOne.XboxOneConnected, 1023)},
-        {&secondXboxOne, xboxState(secondXboxOne, secondXboxOne.XboxOneConnected, 1023)},
+        {&xboxOne, xboxState(xboxOne, xboxOne.acceptsInput(), 1023)},
+        {&secondXboxOne, xboxState(secondXboxOne, secondXboxOne.acceptsInput(), 1023)},
         {&xbox360, xboxState(xbox360, xbox360.Xbox360Connected, 255)},
         {&secondXbox360, xboxState(secondXbox360, secondXbox360.Xbox360Connected, 255)},
         {&hid[0], hid[0].pad}, {&hid[1], hid[1].pad}, {&hid[2], hid[2].pad}, {&hid[3], hid[3].pad},
