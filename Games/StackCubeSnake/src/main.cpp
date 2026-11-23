@@ -87,6 +87,7 @@ void reset() {
 
 void endGame() {
     ended = true;
+    if (!won) console.play_sfx("collision.wav");
     auto& screen = console.screen();
     screen.fillRect(172, 138, 296, 94, TFT_BLACK);
     screen.setTextDatum(lgfx::textdatum_t::top_center);
@@ -114,6 +115,7 @@ void step() {
     drawCell(body[0], Head);
     if (growing) {
         ++score;
+        console.play_sfx("eat.wav");
         showScore();
         won = length == Columns * Rows;
         if (won) endGame();
@@ -125,7 +127,12 @@ void step() {
 
 void setup() {
     ready = console.begin();
-    if (ready) reset();
+    if (ready) {
+        console.preload_sfx("eat.wav");
+        console.preload_sfx("collision.wav");
+        reset();
+        console.play_bg_track("background.wav");
+    }
 }
 
 void loop() {

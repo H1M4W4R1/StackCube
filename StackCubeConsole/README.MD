@@ -52,6 +52,8 @@ Select **Settings** after the last game in the carousel. F2 and the controller's
 
 Set the Wi-Fi SSID and password, select a region and city (for example, **Europe** and **Warsaw**), then select **Save**. Leave the SSID blank to disable Wi-Fi. The time-zone list uses the IANA 2026f database and includes daylight saving rules.
 
+Set **Audio output** to **Built-in speaker**, **HDMI**, or **Off**, then select **Save**. The choice applies when you next launch a game built with the audio API. Existing settings files default to the built-in speaker. Games read audio assets from the same SD folder as their binary.
+
 The launcher creates `/settings/settings.json` when it mounts a card without that file. It carries over valid settings from an earlier `/settings/console.json`. An existing custom POSIX rule stays active until you choose a region and city. Wi-Fi credentials are stored in plain text on the card. The console synchronizes the CoreS3 RTC over NTP when connected. An unset clock displays `--:--`.
 
 ## Hardware checks
@@ -61,3 +63,9 @@ The launcher creates `/settings/settings.json` when it mounts a card without tha
 3. Insert a card with two games. Browse both directions, launch Snake, and return with Esc or B. Leave the controller plugged in and confirm the D-pad moves the carousel after returning.
 4. Swap cards in the launcher. Confirm the catalog and Wi-Fi settings reflect the new card.
 5. Save a time zone and Wi-Fi network in Settings. Reinsert the card and confirm the connection icon and clock update.
+
+### Audio check
+
+1. Save **Built-in speaker**, launch Snake, and collect food. Listen for the pickup sound over the music on the CoreS3.
+2. Repeat with **HDMI** on a display or receiver that supports HDMI audio.
+3. Repeat with **Off** and confirm Snake plays silently. For timing, watch for pauses during pickups and at the music loop point.

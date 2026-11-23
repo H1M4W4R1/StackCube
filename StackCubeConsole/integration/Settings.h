@@ -1,11 +1,13 @@
 #pragma once
 
 #include <Arduino.h>
+#include <StackCubeGameLaunch.h>
 
 struct Settings {
     String ssid;
     String password;
     String timezone = "Etc/UTC";
+    stackcube::AudioOutput audioOutput = stackcube::AudioOutput::Speaker;
 };
 
 class NetworkClock {

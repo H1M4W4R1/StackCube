@@ -29,26 +29,12 @@ SdCard::Change SdCard::poll(uint32_t now) {
 }
 
 SdCard::Change SdCard::mount() {
-    using namespace stackcube::hal;
-    constexpr uint32_t TransferClock = 8000000;
-
     Serial.println("SD card detected");
-    prepareSdBus();
-    if (!SD.begin(SdCs, SPI, TransferClock)) {
-        bool inserted;
-        if (readSdPresence(inserted) && inserted) {
-            Serial.println("SD mount failed, restarting slot power");
-            if (restartSdPower()) {
-                prepareSdBus();
-                present = SD.begin(SdCs, SPI, TransferClock);
-            }
-        }
-        if (!present) {
-            Serial.println("SD mount failed, reinsert the card to retry");
-            return Change::MountFailed;
-        }
+    present = stackcube::hal::mountSd();
+    if (!present) {
+        Serial.println("SD mount failed, reinsert the card to retry");
+        return Change::MountFailed;
     }
-    present = true;
     Serial.println("SD mounted");
     return Change::Inserted;
 }

@@ -34,7 +34,8 @@ bool readSettings(const char* path, Settings& settings) {
     JsonDocument json;
     if (!file || file.isDirectory() || file.size() > 2048 ||
         deserializeJson(json, file, DeserializationOption::NestingLimit(3))) return false;
-    Settings candidate = {json["ssid"] | "", json["password"] | "", json["timezone"] | "Etc/UTC"};
+    Settings candidate = {json["ssid"] | "", json["password"] | "", json["timezone"] | "Etc/UTC",
+                          stackcube::parseAudioOutput(json["audio_output"] | "speaker")};
     if (!valid(candidate)) return false;
     settings = std::move(candidate);
     return true;
@@ -81,13 +82,15 @@ bool NetworkClock::save(const Settings& settings) const {
     json["ssid"] = settings.ssid;
     json["password"] = settings.password;
     json["timezone"] = settings.timezone;
+    json["audio_output"] = stackcube::audioOutputName(settings.audioOutput);
     File file = SD.open(Temporary, FILE_WRITE);
     if (!file) return false;
     const bool written = serializeJson(json, file) == measureJson(json);
     file.close();
     Settings check;
     if (!written || !readSettings(Temporary, check) || check.ssid != settings.ssid ||
-        check.password != settings.password || check.timezone != settings.timezone) return false;
+        check.password != settings.password || check.timezone != settings.timezone ||
+        check.audioOutput != settings.audioOutput) return false;
     if (SD.exists(Path)) {
         Settings previous;
         if (readSettings(Path, previous)) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StackCubeGameLaunch.h"
 #include "StackCubeInput.h"
 #include <M5GFX.h>
 #include <SPI.h>
@@ -23,9 +24,16 @@ bool beginPeripherals();
 void prepareSdBus();
 bool readSdPresence(bool& inserted);
 bool restartSdPower();
+bool mountSd();
 const Input& poll();
 bool setRumble(uint8_t slot, uint8_t left, uint8_t right);
 void stopRumble();
+void beginGameAudio(const GameLaunch& launch);
+void endGameAudio();
+bool preloadSfx(const char* name);
+bool playSfx(const char* name);
+bool playBgTrack(const char* name);
+void stopBgTrack();
 M5GFX& display();
 
 }

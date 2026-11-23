@@ -13,12 +13,14 @@ Bootloader bootloader;
 NetworkClock network;
 LauncherUi ui(catalog);
 bool displayReady;
+stackcube::AudioOutput audioOutput = stackcube::AudioOutput::Speaker;
 
 void updateMedia() {
     const bool mounted = card.mounted();
     if (mounted) catalog.scan();
     else catalog.clear();
     const auto settings = mounted ? network.loadOrCreate() : Settings{};
+    audioOutput = settings.audioOutput;
     network.apply(settings);
     if (displayReady) ui.mediaChanged(card.inserted(), mounted, settings);
 }
@@ -58,13 +60,17 @@ void loop() {
         tickLvglDisplay();
         const int game = ui.takeGame();
         if (game >= 0 && card.mounted() && size_t(game) < catalog.size()) {
-            if (bootloader.start(catalog[game].binary.c_str())) ui.loading(0);
+            const auto& entry = catalog[game];
+            if (bootloader.start(entry.binary.c_str(), {entry.folder, audioOutput})) ui.loading(0);
             else ui.launchError(bootloader.error().c_str());
         }
         Settings settings;
         if (ui.takeSettings(settings)) {
             const bool saved = card.mounted() && network.save(settings);
-            if (saved) network.apply(settings);
+            if (saved) {
+                audioOutput = settings.audioOutput;
+                network.apply(settings);
+            }
             ui.settingsResult(saved, settings);
         }
         static uint32_t lastStatus = now - 500;

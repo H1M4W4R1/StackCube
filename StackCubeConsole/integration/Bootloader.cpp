@@ -3,7 +3,7 @@
 #include <SD.h>
 #include <esp_app_format.h>
 
-bool Bootloader::start(const char* path) {
+bool Bootloader::start(const char* path, const stackcube::GameLaunch& game) {
     if (active()) return false;
     failure.clear();
     written = 0;
@@ -28,6 +28,7 @@ bool Bootloader::start(const char* path) {
         fail("Could not open game partition", result);
         return false;
     }
+    launch = game;
     Serial.printf("Loading %s (%u bytes)\n", path, unsigned(total));
     return true;
 }
@@ -51,6 +52,11 @@ void Bootloader::poll() {
     ota = 0;
     if (result != ESP_OK) {
         fail("Game image did not pass verification", result);
+        return;
+    }
+    // Publish the folder and route together across the reboot into the game image.
+    if (!launch.save()) {
+        fail("Could not save game launch settings");
         return;
     }
     result = esp_ota_set_boot_partition(slot);
