@@ -12,4 +12,5 @@ Build the [console firmware](StackCubeConsole/README.MD), then [prepare a FAT32 
 | [StackCubeHardware](StackCubeHardware/README.MD) | Shared CoreS3 HAL, MAX3421E USB input drivers, and HDMI output |
 | [StackCubeAPI](StackCubeAPI/README.MD) | C++ interface for games |
 | [StackCubeSnake](Games/StackCubeSnake/README.MD) | Snake built with the game API |
+| [StackCubeBlocks](Games/StackCubeBlocks/README.MD) | Falling-block game with a 10 × 21 board and row-clearing chains |
 | [StackCubeBasicExample](Games/StackCubeBasicExample/README.MD) | Small example for keyboard, mouse, and controller input |
