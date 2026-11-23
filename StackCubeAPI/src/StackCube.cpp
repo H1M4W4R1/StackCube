@@ -32,9 +32,13 @@ bool Console::begin() {
 
 const Input& Console::poll() { return hal::poll(); }
 M5GFX& Console::screen() { return hal::display(); }
+bool Console::setRumble(uint8_t slot, uint8_t left, uint8_t right) {
+    return hal::setRumble(slot, left, right);
+}
 
 bool Console::returnToLauncher() {
     if (!selectLauncher()) return false;
+    hal::stopRumble();
     ESP.restart();
     return true;
 }

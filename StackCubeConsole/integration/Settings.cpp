@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include "TimeZones.h"
 
 #include <ArduinoJson.h>
 #include <M5Unified.h>
@@ -10,26 +11,33 @@
 
 namespace {
 constexpr char Directory[] = "/settings";
-constexpr char Path[] = "/settings/console.json";
-constexpr char Backup[] = "/settings/console.bak";
-constexpr char Temporary[] = "/settings/console.tmp";
+constexpr char Path[] = "/settings/settings.json";
+constexpr char Backup[] = "/settings/settings.bak";
+constexpr char Temporary[] = "/settings/settings.tmp";
+constexpr char LegacyPath[] = "/settings/console.json";
+constexpr char LegacyBackup[] = "/settings/console.bak";
 constexpr time_t ValidClock = 1704067200; // 2024-01-01 UTC
 
 bool valid(const Settings& settings) {
-    return settings.ssid.length() <= 32 && settings.password.length() <= 64 &&
-           settings.timezone.length() > 0 && settings.timezone.length() <= 95 &&
-           std::all_of(settings.timezone.begin(), settings.timezone.end(), [](unsigned char ch) {
-               return isalnum(ch) || strchr("+-,.:/<>", ch);
-           });
+    if (settings.ssid.length() > 32 || settings.password.length() > 64 ||
+        settings.timezone.length() == 0 || settings.timezone.length() > 95) return false;
+    if (timezones::find(settings.timezone.c_str()) >= 0) return true;
+    // Existing cards may carry a user-supplied POSIX rule.
+    return std::all_of(settings.timezone.begin(), settings.timezone.end(), [](unsigned char ch) {
+        return isalnum(ch) || strchr("+-,.:/<>", ch);
+    });
 }
 
 bool readSettings(const char* path, Settings& settings) {
+    if (!SD.exists(path)) return false;
     File file = SD.open(path);
     JsonDocument json;
     if (!file || file.isDirectory() || file.size() > 2048 ||
         deserializeJson(json, file, DeserializationOption::NestingLimit(3))) return false;
-    settings = {json["ssid"] | "", json["password"] | "", json["timezone"] | "UTC0"};
-    return valid(settings);
+    Settings candidate = {json["ssid"] | "", json["password"] | "", json["timezone"] | "Etc/UTC"};
+    if (!valid(candidate)) return false;
+    settings = std::move(candidate);
+    return true;
 }
 }
 
@@ -50,10 +58,20 @@ void NetworkClock::begin() {
     if (value.tv_sec >= ValidClock) settimeofday(&value, nullptr);
 }
 
-Settings NetworkClock::load() const {
+Settings NetworkClock::loadOrCreate() const {
     Settings settings;
-    if (readSettings(Path, settings) || readSettings(Backup, settings)) return settings;
-    return {};
+    if (readSettings(Path, settings)) {
+        Serial.println("Loaded /settings/settings.json");
+        return settings;
+    }
+    if (!readSettings(Backup, settings) && !readSettings(LegacyPath, settings)) {
+        readSettings(LegacyBackup, settings);
+    }
+    if (!SD.exists(Path)) {
+        Serial.println(save(settings) ? "Created /settings/settings.json" :
+                                       "Could not create /settings/settings.json");
+    }
+    return settings;
 }
 
 bool NetworkClock::save(const Settings& settings) const {
@@ -85,7 +103,8 @@ bool NetworkClock::save(const Settings& settings) const {
 }
 
 void NetworkClock::apply(const Settings& settings) {
-    timezone = settings.timezone;
+    const int zone = timezones::find(settings.timezone.c_str());
+    timezone = zone >= 0 ? timezones::zones[zone].rule : settings.timezone;
     if (sntp_enabled()) sntp_stop();
     setenv("TZ", timezone.c_str(), 1);
     tzset();

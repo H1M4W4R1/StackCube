@@ -18,7 +18,7 @@ void updateMedia() {
     const bool mounted = card.mounted();
     if (mounted) catalog.scan();
     else catalog.clear();
-    const auto settings = mounted ? network.load() : Settings{};
+    const auto settings = mounted ? network.loadOrCreate() : Settings{};
     network.apply(settings);
     if (displayReady) ui.mediaChanged(mounted, settings, card.inserted() && !mounted);
 }

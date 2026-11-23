@@ -71,6 +71,8 @@ bool restartSdPower() {
 }
 
 const Input& poll() { return usb::poll(); }
+bool setRumble(uint8_t slot, uint8_t left, uint8_t right) { return usb::setRumble(slot, left, right); }
+void stopRumble() { usb::stopRumble(); }
 M5GFX& display() { return hdmi; }
 
 }

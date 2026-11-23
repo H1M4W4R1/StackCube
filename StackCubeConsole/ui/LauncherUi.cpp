@@ -1,4 +1,5 @@
 #include "LauncherUi.h"
+#include "../integration/TimeZones.h"
 
 #include <StackCubeHal.h>
 #include <algorithm>
@@ -25,7 +26,7 @@ lv_obj_t* panel(lv_obj_t* parent, int width, int height, int x, int y, uint32_t 
     lv_obj_remove_style_all(object);
     lv_obj_set_size(object, width, height);
     lv_obj_set_pos(object, x, y);
-    lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
     lv_obj_set_style_bg_opa(object, LV_OPA_COVER, 0);
     return object;
@@ -53,6 +54,11 @@ lv_obj_t* button(lv_obj_t* parent, const char* text, int width, int x, int y) {
 }
 
 bool due(uint32_t now, uint32_t target) { return int32_t(now - target) >= 0; }
+
+void sendKey(lv_obj_t* dropdown, uint32_t key) {
+    lv_event_send(dropdown, LV_EVENT_KEY, &key);
+}
+
 }
 
 void LauncherUi::begin() {
@@ -114,6 +120,8 @@ void LauncherUi::makeHome(lv_obj_t* root) {
         lv_obj_set_style_border_color(card.disc, lv_color_hex(0x2B3B48), 0);
         auto* hub = panel(card.disc, 12, 12, 0, 0, Surface);
         lv_obj_center(hub);
+        card.symbol = label(card.object, LV_SYMBOL_SETTINGS, &lv_font_montserrat_28, Accent);
+        lv_obj_align(card.symbol, LV_ALIGN_CENTER, 2, -12);
         card.title = label(card.object, "", &lv_font_montserrat_12, Text);
         lv_obj_set_width(card.title, CoverWidth - 23);
         lv_obj_set_style_text_align(card.title, LV_TEXT_ALIGN_CENTER, 0);
@@ -135,34 +143,25 @@ void LauncherUi::makeHome(lv_obj_t* root) {
     position = label(root, "", &lv_font_montserrat_12, Muted);
     lv_obj_align(position, LV_ALIGN_TOP_MID, 0, 292);
     panel(root, Width - 44, 1, 22, 314, Line);
-    help = label(root, LV_SYMBOL_LEFT "  " LV_SYMBOL_RIGHT "  Browse     Enter / A  Play", &lv_font_montserrat_12, Muted);
+    help = label(root, LV_SYMBOL_LEFT "  " LV_SYMBOL_RIGHT "  Browse     Enter / A  Select", &lv_font_montserrat_12, Muted);
     lv_obj_set_pos(help, 22, 334);
-    auto* play = button(root, "Play", 66, 426, 322);
-    lv_obj_add_event_cb(play, [](lv_event_t* event) {
-        static_cast<LauncherUi*>(lv_event_get_user_data(event))->select(0);
-    }, LV_EVENT_CLICKED, this);
-    auto* options = button(root, LV_SYMBOL_SETTINGS "  Settings", 118, 500, 322);
-    lv_obj_add_event_cb(options, [](lv_event_t* event) {
-        auto* ui = static_cast<LauncherUi*>(lv_event_get_user_data(event));
-        if (!ui->busy) ui->showSettings(true);
-    }, LV_EVENT_CLICKED, this);
 }
 
 void LauncherUi::makeSettings(lv_obj_t* root) {
     group = lv_group_create();
     settingsPanel = panel(root, Width, Height - 49, 0, 49, Background);
     lv_obj_set_pos(label(settingsPanel, "Settings", &lv_font_montserrat_20, Text), 22, 13);
-    save = button(settingsPanel, "Save", 78, 450, 8);
-    back = button(settingsPanel, "Back", 78, 540, 8);
+    save = button(settingsPanel, "Save", 78, 182, 184);
+    back = button(settingsPanel, "Back", 78, 270, 184);
     lv_obj_add_event_cb(save, [](lv_event_t* event) {
         static_cast<LauncherUi*>(lv_event_get_user_data(event))->saving = true;
     }, LV_EVENT_CLICKED, this);
     lv_obj_add_event_cb(back, [](lv_event_t* event) {
         static_cast<LauncherUi*>(lv_event_get_user_data(event))->showSettings(false);
     }, LV_EVENT_CLICKED, this);
-    constexpr const char* names[] = {"Wi-Fi network", "Wi-Fi password", "Time zone (POSIX)"};
-    constexpr unsigned max[] = {32, 64, 95};
-    for (unsigned i = 0; i < 3; ++i) {
+    constexpr const char* names[] = {"Wi-Fi network", "Wi-Fi password"};
+    constexpr unsigned max[] = {32, 64};
+    for (unsigned i = 0; i < std::size(fields); ++i) {
         const int y = 51 + 40 * i;
         lv_obj_set_pos(label(settingsPanel, names[i], &lv_font_montserrat_14, Text), 22, y + 9);
         auto* field = fields[i] = lv_textarea_create(settingsPanel);
@@ -181,11 +180,32 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
     }
     lv_textarea_set_password_mode(fields[1], true);
     lv_textarea_set_placeholder_text(fields[0], "Leave blank to disable Wi-Fi");
-    lv_textarea_set_placeholder_text(fields[2], "UTC0");
+    lv_obj_set_pos(label(settingsPanel, "Time zone", &lv_font_montserrat_14, Text), 22, 141);
+    region = lv_dropdown_create(settingsPanel);
+    city = lv_dropdown_create(settingsPanel);
+    lv_obj_set_pos(region, 182, 131);
+    lv_obj_set_pos(city, 366, 131);
+    lv_obj_set_width(region, 172);
+    lv_obj_set_width(city, 252);
+    for (auto* dropdown : {region, city}) {
+        lv_dropdown_set_dir(dropdown, LV_DIR_BOTTOM);
+        lv_obj_set_style_bg_color(dropdown, lv_color_hex(Surface), 0);
+        lv_obj_add_event_cb(dropdown, [](lv_event_t* event) {
+            auto* ui = static_cast<LauncherUi*>(lv_event_get_user_data(event));
+            auto* dropdown = lv_event_get_target(event);
+            ui->edit(nullptr, false);
+            lv_group_focus_obj(dropdown);
+            lv_obj_set_style_max_height(lv_dropdown_get_list(dropdown), 133, 0);
+        }, LV_EVENT_READY, this);
+        lv_group_add_obj(group, dropdown);
+    }
+    lv_obj_add_event_cb(region, [](lv_event_t* event) {
+        static_cast<LauncherUi*>(lv_event_get_user_data(event))->updateCities();
+    }, LV_EVENT_VALUE_CHANGED, this);
     lv_group_add_obj(group, save);
     lv_group_add_obj(group, back);
     settingsStatus = label(settingsPanel, "", &lv_font_montserrat_12, Muted);
-    lv_obj_set_pos(settingsStatus, 22, 167);
+    lv_obj_set_pos(settingsStatus, 182, 228);
 
     keyboard = lv_keyboard_create(settingsPanel);
     lv_obj_set_size(keyboard, Width, 123);
@@ -201,39 +221,91 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
 }
 
 void LauncherUi::edit(lv_obj_t* target, bool showKeyboard) {
+    textField = target;
     lv_keyboard_set_textarea(keyboard, target);
     if (target) lv_group_focus_obj(target);
-    if (showKeyboard) lv_obj_clear_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+    if (showKeyboard) {
+        if (!mouseConnected) pointer = {Width / 2, Height - 60};
+        ignorePointerAccept = true;
+        lv_obj_clear_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+        pointerDown = false;
+    }
 }
 
 void LauncherUi::showSettings(bool show) {
     editing = show;
-    controllerPointer = false;
+    repeatDirection = 0;
     pointerDown = false;
+    edit(nullptr, false);
+    for (auto* dropdown : {region, city}) {
+        if (lv_dropdown_is_open(dropdown)) sendKey(dropdown, LV_KEY_ESC);
+    }
     if (!show) {
         lv_obj_add_flag(settingsPanel, LV_OBJ_FLAG_HIDDEN);
         return;
     }
     lv_textarea_set_text(fields[0], settings.ssid.c_str());
     lv_textarea_set_text(fields[1], settings.password.c_str());
-    lv_textarea_set_text(fields[2], settings.timezone.c_str());
-    lv_label_set_text(settingsStatus, mounted ? "Tab to move between fields." : "Insert an SD card to save.");
+    setTimeZone(settings.timezone);
+    lv_label_set_text(settingsStatus, mounted ? "" : "Insert an SD card to save.");
     lv_obj_clear_flag(settingsPanel, LV_OBJ_FLAG_HIDDEN);
-    edit(fields[0], false);
+    lv_group_focus_obj(fields[0]);
 }
 
-int LauncherUi::gameAt(int offset) const {
-    const int count = catalog.size();
-    if (!count) return -1;
-    if (count < 7) {
-        if (count < 3) {
-            const int target = selected + offset;
-            return target >= 0 && target < count ? target : -1;
+void LauncherUi::setTimeZone(const String& id) {
+    const int zone = timezones::find(id == "UTC0" ? "Etc/UTC" : id.c_str());
+    unsigned regionIndex = 0;
+    String options;
+    for (unsigned i = 0; i < timezones::regionCount; ++i) {
+        const auto& entry = timezones::regions[i];
+        if (i) options += '\n';
+        options += entry.name;
+        if (zone >= 0 && entry.first <= size_t(zone) && size_t(zone) < entry.first + entry.count) {
+            regionIndex = i;
         }
-        if (offset < -(count - 1) / 2 || offset > count / 2) return -1;
     }
-    return (selected + offset + count) % count;
+    if (zone < 0) {
+        options += "\nExisting setting";
+        regionIndex = timezones::regionCount;
+    }
+    lv_dropdown_set_options(region, options.c_str());
+    lv_dropdown_set_selected(region, regionIndex);
+    updateCities(zone < 0 ? 0 : size_t(zone) - timezones::regions[regionIndex].first);
+}
+
+void LauncherUi::updateCities(unsigned selectedCity) {
+    const unsigned selectedRegion = lv_dropdown_get_selected(region);
+    if (selectedRegion >= timezones::regionCount) {
+        lv_dropdown_set_options_static(city, "Existing time zone");
+        return;
+    }
+    const auto& entry = timezones::regions[selectedRegion];
+    String options;
+    options.reserve(entry.count * 24);
+    for (size_t i = 0; i < entry.count; ++i) {
+        if (i) options += '\n';
+        String name = strchr(timezones::zones[entry.first + i].id, '/') + 1;
+        name.replace('/', ' ');
+        name.replace('_', ' ');
+        options += name;
+    }
+    lv_dropdown_set_options(city, options.c_str());
+    lv_dropdown_set_selected(city, selectedCity);
+}
+
+String LauncherUi::selectedTimeZone() const {
+    const unsigned selectedRegion = lv_dropdown_get_selected(region);
+    if (selectedRegion >= timezones::regionCount) return settings.timezone;
+    const auto& entry = timezones::regions[selectedRegion];
+    return timezones::zones[entry.first + lv_dropdown_get_selected(city)].id;
+}
+
+int LauncherUi::itemAt(int offset) const {
+    const int count = catalog.size() + 1;
+    const int target = selected + offset;
+    return target >= 0 && target < count ? target : -1;
 }
 
 void LauncherUi::mediaChanged(bool hasMountedCard, const Settings& newSettings, bool unreadable) {
@@ -253,12 +325,21 @@ void LauncherUi::mediaChanged(bool hasMountedCard, const Settings& newSettings, 
 
 void LauncherUi::updateCards() {
     for (auto& card : cards) {
-        card.index = gameAt(card.offset);
+        card.index = itemAt(card.offset);
         if (card.index < 0) {
             lv_obj_add_flag(card.object, LV_OBJ_FLAG_HIDDEN);
             continue;
         }
         lv_obj_clear_flag(card.object, LV_OBJ_FLAG_HIDDEN);
+        if (size_t(card.index) == catalog.size()) {
+            lv_obj_add_flag(card.image, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(card.disc, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(card.symbol, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(card.title, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(card.title, "Settings");
+            continue;
+        }
+        lv_obj_add_flag(card.symbol, LV_OBJ_FLAG_HIDDEN);
         const auto& game = catalog[card.index];
         const bool artwork = !game.cover.isEmpty();
         if (artwork) {
@@ -277,20 +358,21 @@ void LauncherUi::updateCards() {
             lv_label_set_text(card.title, game.title.c_str());
         }
     }
-    if (catalog.size()) {
+    if (size_t(selected) < catalog.size()) {
         lv_label_set_text(title, catalog[selected].title.c_str());
         lv_label_set_text_fmt(position, "%u / %u", unsigned(selected + 1), unsigned(catalog.size()));
-    } else if (cardUnreadable) {
-        lv_label_set_text(title, "SD card could not be mounted");
-        lv_label_set_text(position, "Reinsert the card to retry");
     } else {
-        lv_label_set_text(title, mounted ? "No games installed" : "Insert an SD card");
-        lv_label_set_text(position, mounted ? "Copy game folders to /games" : "");
+        lv_label_set_text(title, "Settings");
+        const char* status = "";
+        if (cardUnreadable) status = "SD card could not be mounted";
+        else if (!mounted) status = "Insert an SD card to load games";
+        else if (!catalog.size()) status = "Copy game folders to /games";
+        lv_label_set_text(position, status);
     }
 }
 
 void LauncherUi::move(int direction) {
-    if (animationStep || gameAt(direction) < 0) return;
+    if (animationStep || itemAt(direction) < 0) return;
     animationStep = direction;
     lv_anim_t animation;
     lv_anim_init(&animation);
@@ -304,7 +386,7 @@ void LauncherUi::move(int direction) {
     });
     lv_anim_set_ready_cb(&animation, [](lv_anim_t* animation) {
         auto* ui = static_cast<LauncherUi*>(lv_anim_get_user_data(animation));
-        ui->selected = ui->gameAt(ui->animationStep);
+        ui->selected = ui->itemAt(ui->animationStep);
         ui->animationStep = 0;
         lv_obj_set_x(ui->row, 0);
         ui->updateCards();
@@ -313,20 +395,17 @@ void LauncherUi::move(int direction) {
 }
 
 void LauncherUi::select(int offset) {
-    if (busy || editing || animationStep || !catalog.size()) return;
+    if (busy || editing || animationStep) return;
     if (offset) move(offset);
+    else if (size_t(selected) == catalog.size()) showSettings(true);
     else requestedGame = selected;
 }
 
 void LauncherUi::handle(const Input& input, uint32_t now) {
-    int dx = input.mouseX;
-    int dy = input.mouseY;
     uint32_t padButtons = 0;
-    bool padConnected = false;
     if (editing) {
         for (const auto& pad : input.pads) {
             if (!pad.connected) continue;
-            padConnected = true;
             padButtons |= pad.buttons;
             if (pad.x < -14500) padButtons |= Left;
             if (pad.x > 14500) padButtons |= Right;
@@ -334,9 +413,10 @@ void LauncherUi::handle(const Input& input, uint32_t now) {
             if (pad.y > 14500) padButtons |= Down;
         }
     }
-    if (!padConnected) controllerPointer = false;
-    if (now - lastPointerMove >= 15 && (padButtons & (Left | Right | Up | Down))) {
-        controllerPointer = true;
+    int dx = input.mouseX;
+    int dy = input.mouseY;
+    const bool virtualPointer = editing && !lv_obj_has_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+    if (virtualPointer && now - lastPointerMove >= 15) {
         lastPointerMove = now;
         dx += padButtons & Left ? -5 : padButtons & Right ? 5 : 0;
         dy += padButtons & Up ? -5 : padButtons & Down ? 5 : 0;
@@ -344,32 +424,14 @@ void LauncherUi::handle(const Input& input, uint32_t now) {
     pointer.x = constrain(pointer.x + dx, 0, Width - 1);
     pointer.y = constrain(pointer.y + dy, 0, Height - 1);
     pointerButtons = input.mouseButtons;
-    pointerDown = controllerPointer && (padButtons & Accept);
-    if (input.mouseConnected || controllerPointer) lv_obj_clear_flag(cursor, LV_OBJ_FLAG_HIDDEN);
+    mouseConnected = input.mouseConnected;
+    if (!(padButtons & Accept)) ignorePointerAccept = false;
+    pointerDown = virtualPointer && !ignorePointerAccept && (padButtons & Accept);
+    if (mouseConnected || virtualPointer) lv_obj_clear_flag(cursor, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(cursor, LV_OBJ_FLAG_HIDDEN);
     if (busy) return;
     if (editing) {
-        if (input.pressed & (Back | Menu)) {
-            showSettings(false);
-            return;
-        }
-        auto* focused = lv_group_get_focused(group);
-        auto** field = std::find(std::begin(fields), std::end(fields), focused);
-        if (input.key == 0x2b || (input.key == 0x28 && field != std::end(fields))) {
-            lv_group_focus_next(group);
-            focused = lv_group_get_focused(group);
-            field = std::find(std::begin(fields), std::end(fields), focused);
-            edit(field != std::end(fields) ? focused : nullptr, false);
-        } else if (field != std::end(fields)) {
-            if (input.text) lv_textarea_add_char(focused, input.text);
-            if (input.key == 0x2a) lv_textarea_del_char(focused);
-            if (input.key == 0x4c) lv_textarea_del_char_forward(focused);
-            if (input.key == 0x50) lv_textarea_cursor_left(focused);
-            if (input.key == 0x4f) lv_textarea_cursor_right(focused);
-        } else if (input.key == 0x28 || input.key == 0x58) {
-            if (focused == save) saving = true;
-            if (focused == back) showSettings(false);
-        }
+        handleSettings(input, padButtons, now);
         return;
     }
 
@@ -380,13 +442,80 @@ void LauncherUi::handle(const Input& input, uint32_t now) {
     if (input.pressed & Accept) select(0);
     if (input.wheel) move(input.wheel > 0 ? -1 : 1);
     const int direction = input.held & (Left | Up) ? -1 : input.held & (Right | Down) ? 1 : 0;
+    if (repeatStep(direction, now)) move(direction);
+}
+
+bool LauncherUi::repeatStep(int direction, uint32_t now) {
     if (direction != repeatDirection) {
         repeatDirection = direction;
-        if (direction) move(direction);
         nextRepeat = now + 330;
+        return direction != 0;
     } else if (direction && due(now, nextRepeat)) {
-        move(direction);
         nextRepeat = now + 200;
+        return true;
+    }
+    return false;
+}
+
+void LauncherUi::handleSettings(const Input& input, uint32_t padButtons, uint32_t now) {
+    auto* focused = lv_group_get_focused(group);
+    const bool dropdown = focused == region || focused == city;
+    const bool choosing = dropdown && lv_dropdown_is_open(focused);
+    const bool enter = input.key == 0x28 || input.key == 0x58;
+    const bool backPressed = input.key == 0x29 || (input.pressed & padButtons & Back);
+    const bool keyboardVisible = !lv_obj_has_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+    if (input.pressed & Menu) {
+        showSettings(false);
+        return;
+    }
+    if (backPressed) {
+        if (choosing) sendKey(focused, LV_KEY_ESC);
+        else if (textField) edit(nullptr, false);
+        else showSettings(false);
+        return;
+    }
+
+    const bool selectPressed = enter || (!keyboardVisible && (input.pressed & padButtons & Accept));
+    const int padDirection = padButtons & (Up | Left) ? -1 : padButtons & (Down | Right) ? 1 : 0;
+    int direction = repeatStep(keyboardVisible ? 0 : padDirection, now) ? padDirection : 0;
+    if (input.key == 0x52 || (!textField && input.key == 0x50)) direction = -1;
+    if (input.key == 0x51 || (!textField && input.key == 0x4f)) direction = 1;
+    if (input.key == 0x2b) {
+        if (choosing) sendKey(focused, LV_KEY_ESC);
+        edit(nullptr, false);
+        lv_group_focus_next(group);
+        return;
+    }
+    if (choosing) {
+        if (direction) sendKey(focused, direction < 0 ? LV_KEY_UP : LV_KEY_DOWN);
+        if (selectPressed) lv_event_send(focused, LV_EVENT_RELEASED, nullptr);
+        return;
+    }
+    if (direction) {
+        edit(nullptr, false);
+        if (direction < 0) lv_group_focus_prev(group);
+        else lv_group_focus_next(group);
+        return;
+    }
+
+    const bool isTextField = focused == fields[0] || focused == fields[1];
+    if (isTextField && (input.text || input.key == 0x2a || input.key == 0x4c)) {
+        if (textField != focused) edit(focused, false);
+        if (input.text) lv_textarea_add_char(focused, input.text);
+        if (input.key == 0x2a) lv_textarea_del_char(focused);
+        if (input.key == 0x4c) lv_textarea_del_char_forward(focused);
+    }
+    if (isTextField && textField == focused) {
+        if (input.key == 0x50) lv_textarea_cursor_left(focused);
+        if (input.key == 0x4f) lv_textarea_cursor_right(focused);
+    }
+    if (!selectPressed) return;
+    if (dropdown) {
+        lv_dropdown_open(focused);
+    } else if (isTextField && textField == focused) {
+        edit(nullptr, false);
+    } else if (focused) {
+        lv_event_send(focused, LV_EVENT_CLICKED, nullptr);
     }
 }
 
@@ -404,7 +533,7 @@ void LauncherUi::status(bool online, const char* time) {
 
 void LauncherUi::loading(unsigned progress) {
     busy = true;
-    lv_label_set_text_fmt(help, "Loading game… %u%%", progress);
+    lv_label_set_text_fmt(help, "Loading game... %u%%", progress);
 }
 
 void LauncherUi::launchError(const char* error) {
@@ -422,8 +551,7 @@ bool LauncherUi::takeSettings(Settings& result) {
     if (!saving) return false;
     saving = false;
     result = {lv_textarea_get_text(fields[0]), lv_textarea_get_text(fields[1]),
-              lv_textarea_get_text(fields[2])};
-    if (result.timezone.isEmpty()) result.timezone = "UTC0";
+              selectedTimeZone()};
     return true;
 }
 

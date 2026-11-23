@@ -5,13 +5,13 @@
 struct Settings {
     String ssid;
     String password;
-    String timezone = "UTC0";
+    String timezone = "Etc/UTC";
 };
 
 class NetworkClock {
 public:
     void begin();
-    Settings load() const;
+    Settings loadOrCreate() const;
     bool save(const Settings& settings) const;
     void apply(const Settings& settings);
     void poll();

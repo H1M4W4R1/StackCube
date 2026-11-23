@@ -16,7 +16,7 @@ Use a FAT32 card and give each game a directory under `/games`. Put the Platform
 /games/Snake/.gameinfo
 /games/Snake/game.bin
 /games/Snake/box.png
-/settings/console.json
+/settings/settings.json
 ```
 
 ```json
@@ -39,9 +39,11 @@ Games that call `Console::begin()` select the launcher for the next reset before
 
 ## Settings
 
-Open **Settings** with F2, a controller’s Start/Menu button, or the mouse. Click a field to open the on-screen keyboard. On a physical keyboard, Tab moves through the fields and buttons. A gamepad moves the settings pointer with its D-pad or left stick, and A clicks.
+Select **Settings** after the last game in the carousel. F2 and the controller's Start/Menu button also open it. Use the D-pad or the arrow keys to move between controls. A or Enter activates the focused control. Select a Wi-Fi text field to open the on-screen keyboard. A controller moves the pointer while that keyboard is open.
 
-Set the Wi-Fi SSID, password, and POSIX time zone, then select **Save**. Leave the SSID blank to disable Wi-Fi. For example, use `UTC0` for UTC or `CET-1CEST,M3.5.0,M10.5.0/3` for Poland. The console stores credentials in plain text on the card at `/settings/console.json`. It synchronizes the CoreS3 RTC over NTP when connected. An unset clock displays `--:--`.
+Set the Wi-Fi SSID and password, select a region and city (for example, **Europe** and **Warsaw**), then select **Save**. Leave the SSID blank to disable Wi-Fi. The time-zone list uses the IANA 2026f database and includes daylight saving rules.
+
+The launcher creates `/settings/settings.json` when it mounts a card without that file. It carries over valid settings from an earlier `/settings/console.json`. An existing custom POSIX rule stays active until you choose a region and city. Wi-Fi credentials are stored in plain text on the card. The console synchronizes the CoreS3 RTC over NTP when connected. An unset clock displays `--:--`.
 
 ## Hardware checks
 

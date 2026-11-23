@@ -126,6 +126,7 @@ XBOXUSB xbox360(&host);
 XBOXUSB secondXbox360(&host);
 HidDevice hid[4];
 const void* owners[4] = {};
+bool rumbling[4] = {};
 
 template <typename Controller>
 Gamepad xboxState(Controller& xbox, bool connected, unsigned triggerMax) {
@@ -178,7 +179,10 @@ const Input& poll() {
     };
     for (auto& owner : owners) {
         for (const auto& source : sources) {
-            if (owner == source.device && !source.state.connected) owner = nullptr;
+            if (owner == source.device && !source.state.connected) {
+                rumbling[&owner - owners] = false;
+                owner = nullptr;
+            }
         }
     }
     uint32_t held = 0;
@@ -203,5 +207,28 @@ const Input& poll() {
     input.pressed = held & ~input.held;
     input.held = held;
     return input;
+}
+
+bool setRumble(uint8_t slot, uint8_t left, uint8_t right) {
+    if (slot >= std::size(owners) || !owners[slot]) return false;
+    const auto* owner = owners[slot];
+    if (owner == &xboxOne || owner == &secondXboxOne) {
+        auto& controller = owner == &xboxOne ? xboxOne : secondXboxOne;
+        if (!left && !right) controller.setRumbleOff();
+        else controller.setRumbleOn(0, 0, (left * 100u + 127) / 255, (right * 100u + 127) / 255);
+    } else if (owner == &xbox360 || owner == &secondXbox360) {
+        auto& controller = owner == &xbox360 ? xbox360 : secondXbox360;
+        controller.setRumbleOn(left, right);
+    } else {
+        return false;
+    }
+    rumbling[slot] = left || right;
+    return true;
+}
+
+void stopRumble() {
+    for (uint8_t slot = 0; slot < std::size(owners); ++slot) {
+        if (rumbling[slot]) setRumble(slot, 0, 0);
+    }
 }
 }

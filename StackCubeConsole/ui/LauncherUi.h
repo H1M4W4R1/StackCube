@@ -26,6 +26,7 @@ private:
         lv_obj_t* image;
         lv_obj_t* title;
         lv_obj_t* disc;
+        lv_obj_t* symbol;
         int index;
         int offset;
     };
@@ -33,10 +34,15 @@ private:
     void makeSettings(lv_obj_t* root);
     void showSettings(bool show);
     void edit(lv_obj_t* target, bool showKeyboard);
+    void setTimeZone(const String& id);
+    void updateCities(unsigned city = 0);
+    String selectedTimeZone() const;
+    void handleSettings(const stackcube::Input& input, uint32_t padButtons, uint32_t now);
+    bool repeatStep(int direction, uint32_t now);
     void updateCards();
     void move(int direction);
     void select(int offset);
-    int gameAt(int offset) const;
+    int itemAt(int offset) const;
     void readPointer(lv_indev_data_t* data) const;
 
     const Catalog& catalog;
@@ -51,14 +57,17 @@ private:
     lv_obj_t* cursor = nullptr;
     lv_obj_t* settingsPanel = nullptr;
     lv_obj_t* settingsStatus = nullptr;
-    lv_obj_t* fields[3] = {};
+    lv_obj_t* fields[2] = {};
+    lv_obj_t* region = nullptr;
+    lv_obj_t* city = nullptr;
     lv_obj_t* save = nullptr;
     lv_obj_t* back = nullptr;
     lv_obj_t* keyboard = nullptr;
+    lv_obj_t* textField = nullptr;
     lv_group_t* group = nullptr;
     lv_point_t pointer = {320, 180};
     uint8_t pointerButtons = 0;
-    bool controllerPointer = false, pointerDown = false;
+    bool mouseConnected = false, pointerDown = false, ignorePointerAccept = false;
     bool editing = false, saving = false, mounted = false, busy = false, cardUnreadable = false;
     int selected = 0, animationStep = 0, requestedGame = -1;
     int repeatDirection = 0;

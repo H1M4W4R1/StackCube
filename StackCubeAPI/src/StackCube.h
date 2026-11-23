@@ -10,6 +10,7 @@ public:
     bool begin();
     const Input& poll();
     M5GFX& screen();
+    bool setRumble(uint8_t slot, uint8_t left, uint8_t right);
     bool returnToLauncher();
 };
 
