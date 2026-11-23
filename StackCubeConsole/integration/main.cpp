@@ -35,8 +35,8 @@ void setup() {
 }
 
 void loop() {
-    const uint32_t now = millis();
     const auto& input = stackcube::hal::poll();
+    const uint32_t now = millis();
     if (bootloader.active()) {
         bootloader.poll();
         if (bootloader.active()) {
@@ -74,6 +74,7 @@ void loop() {
             ui.status(network.connected(), time);
             lastStatus = now;
         }
+        ui.loadCovers(millis());
     }
     delay(2);
 }

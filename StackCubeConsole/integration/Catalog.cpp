@@ -7,7 +7,6 @@
 namespace {
 constexpr size_t MaxGames = 512;
 constexpr size_t MaxManifestSize = 4096;
-constexpr size_t MaxCoverSize = 256 * 1024;
 
 String leaf(const char* path) {
     const char* slash = strrchr(path, '/');
@@ -36,12 +35,16 @@ uint32_t bigEndian(const uint8_t* bytes) {
 }
 
 void readCover(GameEntry& entry, const char* filename) {
-    if (!validLeaf(filename, ".png")) return;
-    const String path = entry.folder + "/" + filename;
+    if (!validLeaf(filename, ".png") && !validLeaf(filename, ".cover")) return;
+    const String stem = entry.folder + "/" + String(filename).substring(0, strrchr(filename, '.') - filename);
+    const String prepared = stem + ".cover";
+    if (SD.exists(prepared)) entry.preparedCover = prepared;
+
+    const String path = stem + ".png";
     File cover = SD.open(path);
     uint8_t header[24];
     constexpr uint8_t signature[] = {137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 'I', 'H', 'D', 'R'};
-    if (!cover || cover.isDirectory() || cover.size() > MaxCoverSize ||
+    if (!cover || cover.isDirectory() || cover.size() > GameEntry::MaxCoverSize ||
         cover.read(header, sizeof(header)) != sizeof(header) ||
         memcmp(header, signature, sizeof(signature))) return;
     const uint32_t width = bigEndian(header + 16);

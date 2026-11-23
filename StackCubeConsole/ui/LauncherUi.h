@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BoxArt.h"
 #include "../integration/Catalog.h"
 #include "../integration/Settings.h"
 
@@ -12,6 +13,7 @@ public:
     void begin();
     void mediaChanged(bool hasMountedCard, const Settings& settings, bool unreadable = false);
     void handle(const stackcube::Input& input, uint32_t now);
+    void loadCovers(uint32_t now);
     void status(bool online, const char* time);
     void loading(unsigned progress);
     void launchError(const char* error);
@@ -37,18 +39,17 @@ private:
     void setTimeZone(const String& id);
     void updateCities(unsigned city = 0);
     String selectedTimeZone() const;
-    void handleSettings(const stackcube::Input& input, uint32_t padButtons, uint32_t now);
-    bool repeatStep(int direction, uint32_t now);
+    void handleSettings(const stackcube::Input& input, uint32_t padButtons);
     void updateCards();
+    void updateCard(Card& card);
     void move(int direction);
     void select(int offset);
     int itemAt(int offset) const;
     void readPointer(lv_indev_data_t* data) const;
 
     const Catalog& catalog;
-    Card cards[7] = {};
-    lv_obj_t* carousel = nullptr;
-    lv_obj_t* row = nullptr;
+    BoxArt covers;
+    Card cards[5] = {};
     lv_obj_t* title = nullptr;
     lv_obj_t* position = nullptr;
     lv_obj_t* help = nullptr;
@@ -69,8 +70,8 @@ private:
     uint8_t pointerButtons = 0;
     bool mouseConnected = false, pointerDown = false, ignorePointerAccept = false;
     bool editing = false, saving = false, mounted = false, busy = false, cardUnreadable = false;
-    int selected = 0, animationStep = 0, requestedGame = -1;
-    int repeatDirection = 0;
-    uint32_t nextRepeat = 0, lastPointerMove = 0;
+    bool coversPending = false, wifiOnline = false;
+    int selected = 0, requestedGame = -1;
+    uint32_t selectedAt = 0, lastPointerMove = 0;
     Settings settings;
 };

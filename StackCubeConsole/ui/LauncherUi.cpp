@@ -2,7 +2,6 @@
 #include "../integration/TimeZones.h"
 
 #include <StackCubeHal.h>
-#include <algorithm>
 
 namespace {
 using namespace stackcube;
@@ -11,10 +10,8 @@ constexpr int Height = hal::Height;
 constexpr int Pitch = 131;
 constexpr int CoverWidth = 112;
 constexpr int CoverHeight = 162;
-constexpr int ArtWidth = 99;
-constexpr int ArtHeight = 150;
 constexpr uint32_t Background = 0x101922;
-constexpr uint32_t Surface = 0x1C2A37;
+constexpr uint32_t Surface = BoxArt::Background;
 constexpr uint32_t Line = 0x354858;
 constexpr uint32_t Text = 0xF0F4F7;
 constexpr uint32_t Muted = 0xA4B6C4;
@@ -53,7 +50,14 @@ lv_obj_t* button(lv_obj_t* parent, const char* text, int width, int x, int y) {
     return object;
 }
 
-bool due(uint32_t now, uint32_t target) { return int32_t(now - target) >= 0; }
+void setVisible(lv_obj_t* object, bool visible) {
+    if (visible && lv_obj_has_flag(object, LV_OBJ_FLAG_HIDDEN)) lv_obj_clear_flag(object, LV_OBJ_FLAG_HIDDEN);
+    if (!visible && !lv_obj_has_flag(object, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(object, LV_OBJ_FLAG_HIDDEN);
+}
+
+int directionOf(uint32_t buttons) {
+    return buttons & (Left | Up) ? -1 : buttons & (Right | Down) ? 1 : 0;
+}
 
 void sendKey(lv_obj_t* dropdown, uint32_t key) {
     lv_event_send(dropdown, LV_EVENT_KEY, &key);
@@ -92,28 +96,25 @@ void LauncherUi::begin() {
 void LauncherUi::makeHome(lv_obj_t* root) {
     lv_obj_set_pos(label(root, "StackCube", &lv_font_montserrat_20, Text), 22, 14);
     wifi = label(root, LV_SYMBOL_WIFI, &lv_font_montserrat_16, Muted);
+    lv_obj_set_style_text_opa(wifi, LV_OPA_50, 0);
     lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -79, 17);
     clock = label(root, "--:--", &lv_font_montserrat_16, Text);
     lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -22, 17);
     panel(root, Width - 44, 1, 22, 48, Line);
 
-    carousel = panel(root, Width, 183, 0, 64, Background);
-    row = panel(carousel, Width, 183, 0, 0, Background);
-    lv_obj_set_style_clip_corner(carousel, true, 0);
-    lv_obj_add_flag(row, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-    for (int offset = -3; offset <= 3; ++offset) {
-        auto& card = cards[offset + 3];
+    auto* carousel = panel(root, Width, 183, 0, 64, Background);
+    for (int offset = -2; offset <= 2; ++offset) {
+        auto& card = cards[offset + 2];
         card.ui = this;
         card.offset = offset;
-        card.object = panel(row, CoverWidth, CoverHeight,
+        card.object = panel(carousel, CoverWidth, CoverHeight,
                             (Width - CoverWidth) / 2 + offset * Pitch, 8, Surface);
         lv_obj_set_style_radius(card.object, 6, 0);
-        lv_obj_set_style_clip_corner(card.object, true, 0);
         lv_obj_set_style_border_width(card.object, offset ? 1 : 3, 0);
         lv_obj_set_style_border_color(card.object, lv_color_hex(offset ? Line : Accent), 0);
         lv_obj_set_style_shadow_width(card.object, offset ? 0 : 12, 0);
         lv_obj_set_style_shadow_color(card.object, lv_color_hex(0x080E14), 0);
-        panel(card.object, 4, CoverHeight, 2, 0, Line);
+        panel(card.object, 4, CoverHeight - 12, 2, 6, Line);
         card.disc = panel(card.object, 62, 62, 25, 30, Line);
         lv_obj_set_style_radius(card.disc, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_border_width(card.disc, 10, 0);
@@ -236,7 +237,7 @@ void LauncherUi::edit(lv_obj_t* target, bool showKeyboard) {
 
 void LauncherUi::showSettings(bool show) {
     editing = show;
-    repeatDirection = 0;
+    if (show) covers.cancel();
     pointerDown = false;
     edit(nullptr, false);
     for (auto* dropdown : {region, city}) {
@@ -315,48 +316,23 @@ void LauncherUi::mediaChanged(bool hasMountedCard, const Settings& newSettings, 
     requestedGame = -1;
     saving = false;
     selected = 0;
-    animationStep = 0;
-    lv_anim_del(row, nullptr);
-    lv_obj_set_x(row, 0);
-    lv_img_cache_invalidate_src(nullptr);
+    for (auto& card : cards) {
+        lv_img_set_src(card.image, nullptr);
+        card.index = -2;
+    }
+    covers.clear();
+    coversPending = true;
+    selectedAt = millis();
     showSettings(false);
     updateCards();
 }
 
 void LauncherUi::updateCards() {
     for (auto& card : cards) {
-        card.index = itemAt(card.offset);
-        if (card.index < 0) {
-            lv_obj_add_flag(card.object, LV_OBJ_FLAG_HIDDEN);
-            continue;
-        }
-        lv_obj_clear_flag(card.object, LV_OBJ_FLAG_HIDDEN);
-        if (size_t(card.index) == catalog.size()) {
-            lv_obj_add_flag(card.image, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(card.disc, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(card.symbol, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(card.title, LV_OBJ_FLAG_HIDDEN);
-            lv_label_set_text(card.title, "Settings");
-            continue;
-        }
-        lv_obj_add_flag(card.symbol, LV_OBJ_FLAG_HIDDEN);
-        const auto& game = catalog[card.index];
-        const bool artwork = !game.cover.isEmpty();
-        if (artwork) {
-            const String source = "S:" + game.cover;
-            const unsigned zoom = std::min(ArtWidth * 256 / game.coverWidth, ArtHeight * 256 / game.coverHeight);
-            lv_img_set_src(card.image, source.c_str());
-            lv_img_set_zoom(card.image, zoom);
-            lv_obj_align(card.image, LV_ALIGN_CENTER, 2, 0);
-            lv_obj_clear_flag(card.image, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(card.disc, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(card.title, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(card.image, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(card.disc, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(card.title, LV_OBJ_FLAG_HIDDEN);
-            lv_label_set_text(card.title, game.title.c_str());
-        }
+        const int index = itemAt(card.offset);
+        if (index == card.index) continue;
+        card.index = index;
+        updateCard(card);
     }
     if (size_t(selected) < catalog.size()) {
         lv_label_set_text(title, catalog[selected].title.c_str());
@@ -371,31 +347,49 @@ void LauncherUi::updateCards() {
     }
 }
 
+void LauncherUi::updateCard(Card& card) {
+    const bool valid = card.index >= 0;
+    const bool game = valid && size_t(card.index) < catalog.size();
+    const auto* image = game ? covers.image(card.index) : nullptr;
+    if (lv_img_get_src(card.image) != image) {
+        lv_img_set_src(card.image, image);
+        if (image) lv_obj_align(card.image, LV_ALIGN_CENTER, 2, 0);
+    }
+    setVisible(card.object, valid);
+    setVisible(card.image, image != nullptr);
+    setVisible(card.disc, game && !image);
+    setVisible(card.symbol, valid && !game);
+    setVisible(card.title, !image);
+    if (valid && !image) lv_label_set_text(card.title, game ? catalog[card.index].title.c_str() : "Settings");
+}
+
+void LauncherUi::loadCovers(uint32_t now) {
+    // Commit input and draw the new selection before reading its art from the SD card.
+    if (busy || editing || !coversPending || now - selectedAt < 60) return;
+    constexpr int nearestFirst[] = {2, 1, 3, 0, 4};
+    for (const int slot : nearestFirst) {
+        auto& card = cards[slot];
+        if (card.index < 0 || size_t(card.index) >= catalog.size() || covers.contains(card.index)) continue;
+        const auto& game = catalog[card.index];
+        if (game.cover.isEmpty() && game.preparedCover.isEmpty()) continue;
+        if (covers.poll(card.index, game)) updateCard(card);
+        return;
+    }
+    coversPending = false;
+}
+
 void LauncherUi::move(int direction) {
-    if (animationStep || itemAt(direction) < 0) return;
-    animationStep = direction;
-    lv_anim_t animation;
-    lv_anim_init(&animation);
-    lv_anim_set_var(&animation, row);
-    lv_anim_set_user_data(&animation, this);
-    lv_anim_set_values(&animation, 0, -direction * Pitch);
-    lv_anim_set_time(&animation, 190);
-    lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
-    lv_anim_set_exec_cb(&animation, [](void* object, int32_t value) {
-        lv_obj_set_x(static_cast<lv_obj_t*>(object), value);
-    });
-    lv_anim_set_ready_cb(&animation, [](lv_anim_t* animation) {
-        auto* ui = static_cast<LauncherUi*>(lv_anim_get_user_data(animation));
-        ui->selected = ui->itemAt(ui->animationStep);
-        ui->animationStep = 0;
-        lv_obj_set_x(ui->row, 0);
-        ui->updateCards();
-    });
-    lv_anim_start(&animation);
+    const int target = itemAt(direction);
+    if (target < 0) return;
+    covers.cancel();
+    selected = target;
+    selectedAt = millis();
+    coversPending = true;
+    updateCards();
 }
 
 void LauncherUi::select(int offset) {
-    if (busy || editing || animationStep) return;
+    if (busy || editing) return;
     if (offset) move(offset);
     else if (size_t(selected) == catalog.size()) showSettings(true);
     else requestedGame = selected;
@@ -427,11 +421,10 @@ void LauncherUi::handle(const Input& input, uint32_t now) {
     mouseConnected = input.mouseConnected;
     if (!(padButtons & Accept)) ignorePointerAccept = false;
     pointerDown = virtualPointer && !ignorePointerAccept && (padButtons & Accept);
-    if (mouseConnected || virtualPointer) lv_obj_clear_flag(cursor, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(cursor, LV_OBJ_FLAG_HIDDEN);
+    setVisible(cursor, mouseConnected || virtualPointer);
     if (busy) return;
     if (editing) {
-        handleSettings(input, padButtons, now);
+        handleSettings(input, padButtons);
         return;
     }
 
@@ -439,25 +432,13 @@ void LauncherUi::handle(const Input& input, uint32_t now) {
         showSettings(true);
         return;
     }
+    const int direction = directionOf(input.pressed);
     if (input.pressed & Accept) select(0);
-    if (input.wheel) move(input.wheel > 0 ? -1 : 1);
-    const int direction = input.held & (Left | Up) ? -1 : input.held & (Right | Down) ? 1 : 0;
-    if (repeatStep(direction, now)) move(direction);
+    else if (direction) move(direction);
+    else if (input.wheel) move(input.wheel > 0 ? -1 : 1);
 }
 
-bool LauncherUi::repeatStep(int direction, uint32_t now) {
-    if (direction != repeatDirection) {
-        repeatDirection = direction;
-        nextRepeat = now + 330;
-        return direction != 0;
-    } else if (direction && due(now, nextRepeat)) {
-        nextRepeat = now + 200;
-        return true;
-    }
-    return false;
-}
-
-void LauncherUi::handleSettings(const Input& input, uint32_t padButtons, uint32_t now) {
+void LauncherUi::handleSettings(const Input& input, uint32_t padButtons) {
     auto* focused = lv_group_get_focused(group);
     const bool dropdown = focused == region || focused == city;
     const bool choosing = dropdown && lv_dropdown_is_open(focused);
@@ -476,8 +457,7 @@ void LauncherUi::handleSettings(const Input& input, uint32_t padButtons, uint32_
     }
 
     const bool selectPressed = enter || (!keyboardVisible && (input.pressed & padButtons & Accept));
-    const int padDirection = padButtons & (Up | Left) ? -1 : padButtons & (Down | Right) ? 1 : 0;
-    int direction = repeatStep(keyboardVisible ? 0 : padDirection, now) ? padDirection : 0;
+    int direction = keyboardVisible ? 0 : directionOf(input.pressed & padButtons);
     if (input.key == 0x52 || (!textField && input.key == 0x50)) direction = -1;
     if (input.key == 0x51 || (!textField && input.key == 0x4f)) direction = 1;
     if (input.key == 0x2b) {
@@ -525,8 +505,12 @@ void LauncherUi::readPointer(lv_indev_data_t* data) const {
 }
 
 void LauncherUi::status(bool online, const char* time) {
-    lv_label_set_text(clock, time);
-    lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -22, 17);
+    if (strcmp(lv_label_get_text(clock), time)) {
+        lv_label_set_text(clock, time);
+        lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -22, 17);
+    }
+    if (online == wifiOnline) return;
+    wifiOnline = online;
     lv_obj_set_style_text_color(wifi, lv_color_hex(online ? Green : Muted), 0);
     lv_obj_set_style_text_opa(wifi, online ? LV_OPA_COVER : LV_OPA_50, 0);
 }

@@ -9,11 +9,16 @@
 
 namespace stackcube::usb {
 namespace {
+constexpr uint32_t RetryIntervalMs = 1000;
+constexpr uint32_t EnumerationTimeoutMs = 2000;
 USB host;
 USBHub hub(&host);
 USBHub secondHub(&host);
 Input input;
 bool ready;
+uint32_t retryAt;
+uint32_t stateSince;
+uint8_t lastHostState;
 
 uint32_t keyboardButton(uint8_t key) {
     switch (key) {
@@ -120,8 +125,41 @@ private:
     }
 };
 
-XBOXONE xboxOne(&host);
-XBOXONE secondXboxOne(&host);
+class XboxOnePad : public XBOXONE {
+public:
+    XboxOnePad() : XBOXONE(&host) {}
+
+    uint8_t Init(uint8_t parent, uint8_t port, bool lowspeed) override {
+        const uint8_t result = XBOXONE::Init(parent, port, lowspeed);
+        if (!result) Serial.printf("Xbox One gamepad attached (USB address %u)\n", GetAddress());
+        return result;
+    }
+
+    uint8_t Poll() override {
+        const uint32_t previousPoll = qNextPollTime;
+        const uint8_t result = XBOXONE::Poll();
+        if (qNextPollTime != previousPoll) {
+            // NAK is normal when an idle controller has no report ready.
+            if (!result || result == hrNAK) errors = 0;
+            else if (errors < ErrorLimit) ++errors;
+        }
+        return result;
+    }
+
+    uint8_t Release() override {
+        errors = 0;
+        return XBOXONE::Release();
+    }
+
+    bool needsRecovery() const { return errors == ErrorLimit; }
+
+private:
+    static constexpr uint8_t ErrorLimit = 3;
+    uint8_t errors = 0;
+};
+
+XboxOnePad xboxOne;
+XboxOnePad secondXboxOne;
 XBOXUSB xbox360(&host);
 XBOXUSB secondXbox360(&host);
 HidDevice hid[4];
@@ -155,10 +193,54 @@ struct PadSource {
     const void* device;
     Gamepad state;
 };
+
+void serviceHost() {
+    const char* failure = "initialization failed";
+    uint32_t now = millis();
+    if (ready) {
+        host.Task();
+        now = millis();
+        const uint8_t state = host.getUsbTaskState();
+        if (state != lastHostState) {
+            lastHostState = state;
+            stateSince = now;
+        }
+        const bool enumerating = state >= USB_ATTACHED_SUBSTATE_SETTLE && state <= USB_STATE_CONFIGURING;
+        if (state == USB_STATE_ERROR || state == USB_DETACHED_SUBSTATE_ILLEGAL ||
+            (enumerating && now - stateSince >= EnumerationTimeoutMs)) {
+            failure = "enumeration failed";
+        } else if (xboxOne.needsRecovery() || secondXboxOne.needsRecovery()) {
+            failure = "Xbox input transfer failed";
+        } else {
+            return;
+        }
+    }
+    if (int32_t(now - retryAt) < 0) return;
+
+    Serial.printf("USB host retry: %s\n", failure);
+    // Reset enumeration state and release driver instances even when the bus
+    // never signalled a physical disconnect.
+    for (auto& device : hid) device.Release();
+    xboxOne.Release();
+    secondXboxOne.Release();
+    xbox360.Release();
+    secondXbox360.Release();
+    secondHub.Release();
+    hub.Release();
+    host.ForEachUsbDevice([](UsbDevice* device) {
+        host.GetAddressPool().FreeAddress(device->address.devAddress);
+    });
+    host.ResetHubPreMask();
+    begin();
+}
 }
 
 bool begin() {
+    host.setUsbTaskState(USB_DETACHED_SUBSTATE_INITIALIZE);
     ready = host.Init() == 0;
+    lastHostState = host.getUsbTaskState();
+    stateSince = millis();
+    retryAt = stateSince + RetryIntervalMs;
     return ready;
 }
 
@@ -168,7 +250,7 @@ const Input& poll() {
     input.mouseX = input.mouseY = input.wheel = 0;
     input.mouseButtons = 0;
     input.mouseConnected = false;
-    if (ready) host.Task();
+    serviceHost();
 
     const PadSource sources[] = {
         {&xboxOne, xboxState(xboxOne, xboxOne.XboxOneConnected, 1023)},

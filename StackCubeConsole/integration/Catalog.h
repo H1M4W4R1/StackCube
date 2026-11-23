@@ -4,10 +4,13 @@
 #include <vector>
 
 struct GameEntry {
+    static constexpr size_t MaxCoverSize = 256 * 1024;
+
     String folder;
     String title;
     String binary;
     String cover;
+    String preparedCover;
     uint16_t coverWidth = 0, coverHeight = 0;
 };
 

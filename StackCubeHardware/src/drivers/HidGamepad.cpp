@@ -135,7 +135,10 @@ void HidGamepad::apply(Gamepad& pad, const uint8_t* data, uint8_t length) const 
         } else if (f.control == Hat) {
             pad.buttons &= ~(Up | Down | Left | Right);
             const int64_t dir = v - f.minimum;
-            if (dir >= 0 && dir < 8) pad.buttons |= directions[dir];
+            if (dir >= 0 && dir < 8 && v <= f.maximum) {
+                const bool cardinalOnly = int64_t(f.maximum) - f.minimum == 3;
+                pad.buttons |= directions[cardinalOnly ? dir * 2 : dir];
+            }
         } else if (f.maximum > f.minimum) {
             const int64_t axis = (v - f.minimum) * 65535 / (int64_t(f.maximum) - f.minimum) - 32768;
             const int16_t normalized = std::clamp<int64_t>(axis, -32768, 32767);
