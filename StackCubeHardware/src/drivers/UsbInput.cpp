@@ -51,18 +51,18 @@ public:
         return HIDComposite::Release();
     }
 
-    uint32_t keys() const {
+    uint32_t collectInput() const {
         uint32_t buttons = 0;
-        for (const auto& iface : interfaces) buttons |= iface.held;
-        return buttons;
-    }
-
-    void mouse() const {
         for (const auto& iface : interfaces) {
-            if (iface.protocol != USB_HID_PROTOCOL_MOUSE) continue;
-            input.mouseConnected = true;
-            input.mouseButtons |= iface.mouseButtons;
+            if (iface.protocol == USB_HID_PROTOCOL_KEYBOARD) {
+                input.keyboardConnected = true;
+                buttons |= iface.held;
+            } else if (iface.protocol == USB_HID_PROTOCOL_MOUSE) {
+                input.mouseConnected = true;
+                input.mouseButtons |= iface.mouseButtons;
+            }
         }
+        return buttons;
     }
 
     Gamepad pad;
@@ -250,6 +250,7 @@ const Input& poll() {
     input.mouseX = input.mouseY = input.wheel = 0;
     input.mouseButtons = 0;
     input.mouseConnected = false;
+    input.keyboardConnected = false;
     serviceHost();
 
     const PadSource sources[] = {
@@ -268,10 +269,7 @@ const Input& poll() {
         }
     }
     uint32_t held = 0;
-    for (auto& device : hid) {
-        held |= device.keys();
-        device.mouse();
-    }
+    for (const auto& device : hid) held |= device.collectInput();
     for (auto& pad : input.pads) pad = {};
     for (const auto& source : sources) {
         if (!source.state.connected) continue;

@@ -20,7 +20,7 @@ void updateMedia() {
     else catalog.clear();
     const auto settings = mounted ? network.loadOrCreate() : Settings{};
     network.apply(settings);
-    if (displayReady) ui.mediaChanged(mounted, settings, card.inserted() && !mounted);
+    if (displayReady) ui.mediaChanged(card.inserted(), mounted, settings);
 }
 }
 

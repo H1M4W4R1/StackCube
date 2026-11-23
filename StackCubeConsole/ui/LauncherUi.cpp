@@ -18,6 +18,28 @@ constexpr uint32_t Muted = 0xA4B6C4;
 constexpr uint32_t Accent = 0xF5BF74;
 constexpr uint32_t Green = 0x86D9B2;
 
+// One-bit opacity masks, stored as two bytes per 16-pixel row.
+constexpr uint8_t MousePixels[] = {
+    0x00, 0x00,  0x03, 0xc0,  0x07, 0xe0,  0x0f, 0xf0,
+    0x1e, 0x78,  0x1e, 0x78,  0x1e, 0x78,  0x1f, 0xf8,
+    0x1f, 0xf8,  0x1f, 0xf8,  0x1f, 0xf8,  0x1f, 0xf8,
+    0x0f, 0xf0,  0x07, 0xe0,  0x03, 0xc0,  0x00, 0x00,
+};
+constexpr uint8_t GamepadPixels[] = {
+    0x00, 0x00,  0x00, 0x00,  0x00, 0x00,  0x0f, 0xf0,
+    0x1f, 0xf8,  0x3f, 0xdc,  0x37, 0xfc,  0x63, 0xae,
+    0x77, 0xfe,  0x7f, 0xde,  0x7c, 0x3e,  0x38, 0x1c,
+    0x10, 0x08,  0x00, 0x00,  0x00, 0x00,  0x00, 0x00,
+};
+constexpr auto StatusIconHeader = [] {
+    lv_img_header_t header{};
+    header.cf = LV_IMG_CF_ALPHA_1BIT;
+    header.w = header.h = 16;
+    return header;
+}();
+constexpr lv_img_dsc_t MouseImage{StatusIconHeader, sizeof(MousePixels), MousePixels};
+constexpr lv_img_dsc_t GamepadImage{StatusIconHeader, sizeof(GamepadPixels), GamepadPixels};
+
 lv_obj_t* panel(lv_obj_t* parent, int width, int height, int x, int y, uint32_t color) {
     auto* object = lv_obj_create(parent);
     lv_obj_remove_style_all(object);
@@ -34,6 +56,14 @@ lv_obj_t* label(lv_obj_t* parent, const char* text, const lv_font_t* font, uint3
     lv_label_set_text(object, text);
     lv_obj_set_style_text_color(object, lv_color_hex(color), 0);
     lv_obj_set_style_text_font(object, font, 0);
+    return object;
+}
+
+lv_obj_t* statusImage(lv_obj_t* parent, const lv_img_dsc_t& source) {
+    auto* object = lv_img_create(parent);
+    lv_img_set_src(object, &source);
+    lv_obj_set_style_img_recolor(object, lv_color_hex(Text), 0);
+    lv_obj_set_style_img_recolor_opa(object, LV_OPA_COVER, 0);
     return object;
 }
 
@@ -90,14 +120,23 @@ void LauncherUi::begin() {
     lv_obj_clear_flag(cursor, LV_OBJ_FLAG_CLICKABLE);
     if (input) lv_indev_set_cursor(input, cursor);
     lv_obj_add_flag(cursor, LV_OBJ_FLAG_HIDDEN);
-    mediaChanged(false, {});
+    mediaChanged(false, false, {});
 }
 
 void LauncherUi::makeHome(lv_obj_t* root) {
     lv_obj_set_pos(label(root, "StackCube", &lv_font_montserrat_20, Text), 22, 14);
-    wifi = label(root, LV_SYMBOL_WIFI, &lv_font_montserrat_16, Muted);
+    auto* statusIcons = panel(root, LV_SIZE_CONTENT, lv_font_montserrat_16.line_height, 0, 0, Background);
+    lv_obj_align(statusIcons, LV_ALIGN_TOP_RIGHT, -79, 17);
+    lv_obj_set_flex_flow(statusIcons, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(statusIcons, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(statusIcons, 8, 0);
+    sdIcon = label(statusIcons, LV_SYMBOL_SD_CARD, &lv_font_montserrat_16, Text);
+    mouseIcon = statusImage(statusIcons, MouseImage);
+    keyboardIcon = label(statusIcons, LV_SYMBOL_KEYBOARD, &lv_font_montserrat_16, Text);
+    gamepadIcon = statusImage(statusIcons, GamepadImage);
+    for (auto* icon : {sdIcon, mouseIcon, keyboardIcon, gamepadIcon}) setVisible(icon, false);
+    wifi = label(statusIcons, LV_SYMBOL_WIFI, &lv_font_montserrat_16, Muted);
     lv_obj_set_style_text_opa(wifi, LV_OPA_50, 0);
-    lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -79, 17);
     clock = label(root, "--:--", &lv_font_montserrat_16, Text);
     lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -22, 17);
     panel(root, Width - 44, 1, 22, 48, Line);
@@ -309,9 +348,10 @@ int LauncherUi::itemAt(int offset) const {
     return target >= 0 && target < count ? target : -1;
 }
 
-void LauncherUi::mediaChanged(bool hasMountedCard, const Settings& newSettings, bool unreadable) {
+void LauncherUi::mediaChanged(bool hasInsertedCard, bool hasMountedCard, const Settings& newSettings) {
     mounted = hasMountedCard;
-    cardUnreadable = unreadable;
+    cardUnreadable = hasInsertedCard && !hasMountedCard;
+    setVisible(sdIcon, hasInsertedCard);
     settings = newSettings;
     requestedGame = -1;
     saving = false;
@@ -397,16 +437,20 @@ void LauncherUi::select(int offset) {
 
 void LauncherUi::handle(const Input& input, uint32_t now) {
     uint32_t padButtons = 0;
-    if (editing) {
-        for (const auto& pad : input.pads) {
-            if (!pad.connected) continue;
-            padButtons |= pad.buttons;
-            if (pad.x < -14500) padButtons |= Left;
-            if (pad.x > 14500) padButtons |= Right;
-            if (pad.y < -14500) padButtons |= Up;
-            if (pad.y > 14500) padButtons |= Down;
-        }
+    bool gamepadConnected = false;
+    for (const auto& pad : input.pads) {
+        if (!pad.connected) continue;
+        gamepadConnected = true;
+        if (!editing) break;
+        padButtons |= pad.buttons;
+        if (pad.x < -14500) padButtons |= Left;
+        if (pad.x > 14500) padButtons |= Right;
+        if (pad.y < -14500) padButtons |= Up;
+        if (pad.y > 14500) padButtons |= Down;
     }
+    setVisible(mouseIcon, input.mouseConnected);
+    setVisible(keyboardIcon, input.keyboardConnected);
+    setVisible(gamepadIcon, gamepadConnected);
     int dx = input.mouseX;
     int dy = input.mouseY;
     const bool virtualPointer = editing && !lv_obj_has_flag(keyboard, LV_OBJ_FLAG_HIDDEN);

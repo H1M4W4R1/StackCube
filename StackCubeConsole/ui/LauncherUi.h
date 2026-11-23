@@ -11,7 +11,7 @@ class LauncherUi {
 public:
     explicit LauncherUi(const Catalog& catalog) : catalog(catalog) {}
     void begin();
-    void mediaChanged(bool hasMountedCard, const Settings& settings, bool unreadable = false);
+    void mediaChanged(bool hasInsertedCard, bool hasMountedCard, const Settings& settings);
     void handle(const stackcube::Input& input, uint32_t now);
     void loadCovers(uint32_t now);
     void status(bool online, const char* time);
@@ -53,6 +53,10 @@ private:
     lv_obj_t* title = nullptr;
     lv_obj_t* position = nullptr;
     lv_obj_t* help = nullptr;
+    lv_obj_t* sdIcon = nullptr;
+    lv_obj_t* mouseIcon = nullptr;
+    lv_obj_t* keyboardIcon = nullptr;
+    lv_obj_t* gamepadIcon = nullptr;
     lv_obj_t* wifi = nullptr;
     lv_obj_t* clock = nullptr;
     lv_obj_t* cursor = nullptr;

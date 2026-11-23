@@ -28,6 +28,7 @@ struct Input {
     uint8_t mouseButtons = 0;
     bool mouseConnected = false;
     Gamepad pads[4];
+    bool keyboardConnected = false;
 };
 
 }
