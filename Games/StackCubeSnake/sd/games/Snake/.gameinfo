@@ -1,4 +1,4 @@
 {
   "title": "Snake",
-  "binary": "game.bin"
+  "binary": "game.elf"
 }

@@ -5,8 +5,8 @@ Fit pieces of two to five blocks into a **10-column × 21-row** board. Fill a ro
 ## Build and play
 
 1. From the repository root, run `pio run -d Games/StackCubeBlocks -e cores3` to build for CoreS3.
-2. Create `/games/StackCubeBlocks` on your FAT32 microSD card. Copy [`.gameinfo`](sd/games/StackCubeBlocks/.gameinfo) and [the box cover](sd/games/StackCubeBlocks/box.png) there. Copy `Games/StackCubeBlocks/.pio/build/cores3/firmware.bin` into the same folder as `game.bin`.
-3. Insert the card and select **StackCubeBlocks** in the launcher.
+2. Create `/games/StackCubeBlocks` on your FAT32 microSD card. Copy [`.gameinfo`](sd/games/StackCubeBlocks/.gameinfo) and [the box cover](sd/games/StackCubeBlocks/box.png) there. Copy `Games/StackCubeBlocks/.pio/build/cores3/game.elf` into the same folder.
+3. Insert the card and select **Pseudo-Tetris** in the launcher.
 
 The [SD card packager](../README.MD) can build and stage all bundled games in one command.
 

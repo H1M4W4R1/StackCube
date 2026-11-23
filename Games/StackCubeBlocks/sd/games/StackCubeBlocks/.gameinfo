@@ -1,4 +1,4 @@
 {
   "title": "Pseudo-Tetris",
-  "binary": "game.bin"
+  "binary": "game.elf"
 }

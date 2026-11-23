@@ -2,3 +2,4 @@
 
 bool beginLvglDisplay();
 void tickLvglDisplay();
+void invalidateLvglDisplay();

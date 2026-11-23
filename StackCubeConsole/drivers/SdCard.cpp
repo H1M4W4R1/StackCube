@@ -22,7 +22,10 @@ SdCard::Change SdCard::poll(uint32_t now) {
     if (candidate == detected || now - lastTransition < DebounceMs) return Change::None;
     detected = candidate;
     if (detected) return mount();
-    if (present) SD.end();
+    if (present) {
+        stackcube::hal::endGameAudio();
+        SD.end();
+    }
     present = false;
     Serial.println("SD removed");
     return Change::Removed;

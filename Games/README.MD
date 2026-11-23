@@ -9,4 +9,4 @@ From the repository root, run the command for your OS. Both commands require Pyt
 
 The script builds Snake, StackCubeBlocks, and Input Example and regenerates `Games/dist`. Copy the `games` folder **inside** `Games/dist` to the root of a FAT32 microSD card. The launcher should list all three games.
 
-To include another game, add its PlatformIO project directly under `Games/` with a `cores3` environment and a single `sd/games/<GameName>/` folder containing its `.gameinfo` manifest and any assets. The script copies the application binary there as `game.bin` by default or uses the name in the manifest's `binary` field.
+To include another game, add its PlatformIO project directly under `Games/` using `platformio-game.ini` and a single `sd/games/<GameName>/` folder containing its `.gameinfo` manifest and any assets. Set `"binary": "game.elf"` in the manifest. The script copies the built module there using the name in that field.

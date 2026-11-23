@@ -76,7 +76,8 @@ void Catalog::scan() {
         }
         const char* title = json["title"] | "";
         const char* binary = json["binary"] | "game.bin";
-        if (!*title || strlen(title) > 120 || !validLeaf(binary, ".bin")) continue;
+        if (!*title || strlen(title) > 120 ||
+            (!validLeaf(binary, ".bin") && !validLeaf(binary, ".elf"))) continue;
         entry.title = title;
         entry.binary = entry.folder + "/" + binary;
         if (!SD.exists(entry.binary)) continue;

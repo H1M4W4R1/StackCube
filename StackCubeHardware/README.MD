@@ -1,12 +1,12 @@
 # StackCube hardware library
 
-Build this library with any of the three PlatformIO projects. The launcher and games share its CoreS3 HAL and USB input drivers.
+Build this library with the StackCubeConsole PlatformIO project. Games access its CoreS3 HAL and USB input drivers through the game ABI.
 
 ```powershell
 pio run -d StackCubeConsole
 ```
 
-The HAL configures M126 HDMI at 1280 × 720 with a 640 × 360 drawing surface. It serializes HDMI, SD, and MAX3421E SPI transfers by keeping them on the Arduino loop task. Keep game drawing and `Console::poll()` on that task. End open drawing transactions before polling input.
+The HAL configures M126 HDMI at 1280 × 720 with a 640 × 360 drawing surface. It serializes HDMI, SD, and MAX3421E SPI transfers on the Arduino loop task. The launcher runs native game callbacks on the same task and polls the HAL between callbacks.
 
 Game audio uses the CoreS3 speaker or M126 HDMI I²S. HDMI uses GPIO6 for BCLK, GPIO0 for LRCLK, and GPIO13 for data, at a fixed 48 kHz. The built-in amplifier uses its own clocks and shares GPIO13 for data. The HAL selects one route per launch and keeps the amplifier disabled on HDMI. The separate M5Unified playback task mixes buffered PCM and drives I²S DMA without accessing SPI.
 

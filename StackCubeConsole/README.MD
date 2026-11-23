@@ -8,13 +8,15 @@ pio run -d StackCubeConsole -t upload
 pio device monitor -b 115200
 ```
 
+The first build downloads the pinned [Espressif ELF loader](https://components.espressif.com/components/espressif/elf_loader/versions/2.1.0/readme) into the project build cache.
+
 ## SD card layout
 
-Use a FAT32 card and give each game a directory under `/games`. Put the PlatformIO **application** binary and its manifest in the same directory.
+Use a FAT32 card and give each game a directory under `/games`. Put the game module and its manifest in the same directory.
 
 ```text
 /games/Snake/.gameinfo
-/games/Snake/game.bin
+/games/Snake/game.elf
 /games/Snake/box.png
 /settings/settings.json
 ```
@@ -22,7 +24,7 @@ Use a FAT32 card and give each game a directory under `/games`. Put the Platform
 ```json
 {
   "title": "Snake",
-  "binary": "game.bin",
+  "binary": "game.elf",
   "cover": "box.png"
 }
 ```
@@ -42,9 +44,9 @@ The launcher mounts the card when the CoreS3 detects insertion and rebuilds the 
 
 ## Boot and recovery
 
-The ESP32-S3 bootloader starts the factory launcher. When you select a game, the launcher streams its application binary into the 4 MiB game partition, verifies the image, and requests a reboot into that partition. Use a CoreS3 PlatformIO `firmware.bin` built with the [game API](../StackCubeAPI/README.MD).
+The ESP32-S3 bootloader starts the factory launcher. For `game.elf`, the launcher loads the native module from SD into PSRAM and calls through the [versioned game API](../StackCubeAPI/README.MD). The running firmware supplies display, input, and audio. Use modules from sources you trust. They run with the same access as the console firmware. Resetting the console returns to the launcher.
 
-Games that call `Console::begin()` select the launcher for the next reset before initializing the HDMI or USB hardware. `Console::returnToLauncher()` reboots immediately. If a game fails before reaching the API, upload the console again over USB-C. That upload resets the boot selection to the factory launcher.
+Legacy `game.bin` images use the 4 MiB game partition and reboot into their bundled drivers. Older games that reach `Console::begin()` select the launcher for the next reset. If an older game fails earlier, upload the console again over USB-C to reset the boot selection. Rebuild an older game once as an ELF module to use the console's current drivers.
 
 ## Settings
 
@@ -52,7 +54,7 @@ Select **Settings** after the last game in the carousel. F2 and the controller's
 
 Set the Wi-Fi SSID and password, select a region and city (for example, **Europe** and **Warsaw**), then select **Save**. Leave the SSID blank to disable Wi-Fi. The time-zone list uses the IANA 2026f database and includes daylight saving rules.
 
-Set **Audio output** to **Built-in speaker**, **HDMI**, or **Off**. Set **Master volume**, **Music volume**, and **Effects volume** with the mouse, or focus a slider and press Left or Right. Master controls the overall level. Set a slider to **0%** to mute the corresponding audio. Select **Save** to apply your choices the next time you launch a rebuilt game. Missing settings default to **Master 100%, Music 10%, and Effects 25%**. Games read audio assets from the same SD folder as their binary.
+Set **Audio output** to **Built-in speaker**, **HDMI**, or **Off**. Set **Master volume**, **Music volume**, and **Effects volume** with the mouse, or focus a slider and press Left or Right. Master controls the overall level. Set a slider to **0%** to mute the corresponding audio. Select **Save** to apply your choices the next time you launch a game. Missing settings default to **Master 100%, Music 10%, and Effects 25%**. Games read audio assets from the same SD folder as their binary.
 
 The launcher creates `/settings/settings.json` when it mounts a card without that file. It carries over valid settings from an earlier `/settings/console.json`. An existing custom POSIX rule stays active until you choose a region and city. Wi-Fi credentials are stored in plain text on the card. The console synchronizes the CoreS3 RTC over NTP when connected. An unset clock displays `--:--`.
 
@@ -60,9 +62,13 @@ The launcher creates `/settings/settings.json` when it mounts a card without tha
 
 1. Power on with HDMI attached. Confirm the launcher appears and USB-C reports HDMI and MAX3421E initialization.
 2. Plug in a keyboard, a wired Xbox controller, and a mouse individually. Repeat through a powered USB 2.0 hub.
-3. Insert a card with two games. Browse both directions, launch Snake, and return with Esc or B. Leave the controller plugged in and confirm the D-pad moves the carousel after returning.
+3. Insert a card with two games. Browse both directions, launch Snake, and return with Esc or B. Leave the controller plugged in and confirm the D-pad moves the carousel after returning. Launch Snake again to check that its state resets.
 4. Swap cards in the launcher. Confirm the catalog and Wi-Fi settings reflect the new card.
 5. Save a time zone and Wi-Fi network in Settings. Reinsert the card and confirm the connection icon and clock update.
+
+### Binary compatibility check
+
+Update the console firmware with the same SD card and launch the same `game.elf` again. Verify rendering, input, audio, and return to the launcher.
 
 ### Audio check
 

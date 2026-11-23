@@ -1,5 +1,7 @@
 #include <StackCube.h>
 
+#include <algorithm>
+
 using namespace stackcube;
 
 namespace {
@@ -13,29 +15,32 @@ void setup() {
     ready = console.begin();
     if (!ready) return;
     auto& screen = console.screen();
-    screen.fillScreen(TFT_NAVY);
-    screen.setTextColor(TFT_WHITE);
+    screen.fillScreen(Navy);
+    screen.setTextColor(White);
     screen.setTextSize(2);
     screen.drawString("StackCube input example", 22, 18);
     screen.drawString("Move with arrows, stick or mouse. Esc / B returns.", 22, 322);
-    screen.fillCircle(x, y, 9, TFT_YELLOW);
+    screen.fillCircle(x, y, 9, Yellow);
 }
 
 void loop() {
     const auto& input = console.poll();
-    if (input.pressed & (Back | Menu)) console.returnToLauncher();
+    if (input.pressed & (Back | Menu)) {
+        console.returnToLauncher();
+        return;
+    }
     if (ready) {
         const int dx = input.mouseX + ((input.held & Right) ? 3 : 0) - ((input.held & Left) ? 3 : 0);
         const int dy = input.mouseY + ((input.held & Down) ? 3 : 0) - ((input.held & Up) ? 3 : 0);
         const bool accepting = input.held & Accept;
         if (dx || dy || accepting != wasAccepting) {
             auto& screen = console.screen();
-            screen.fillCircle(x, y, 9, TFT_NAVY);
-            x = constrain(x + dx, 10, screen.width() - 11);
-            y = constrain(y + dy, 57, 300);
-            screen.fillCircle(x, y, 9, accepting ? TFT_GREEN : TFT_YELLOW);
+            screen.fillCircle(x, y, 9, Navy);
+            x = std::clamp(x + dx, 10, screen.width() - 11);
+            y = std::clamp(y + dy, 57, 300);
+            screen.fillCircle(x, y, 9, accepting ? Green : Yellow);
             wasAccepting = accepting;
         }
     }
-    delay(12);
+    console.sleep(12);
 }

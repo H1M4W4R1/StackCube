@@ -52,3 +52,5 @@ void tickLvglDisplay() {
     previous = now;
     lv_timer_handler();
 }
+
+void invalidateLvglDisplay() { lv_obj_invalidate(lv_scr_act()); }

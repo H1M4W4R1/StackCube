@@ -2,6 +2,7 @@
 #include "../ui/LauncherUi.h"
 #include "../ui/LvglDisplay.h"
 #include "Bootloader.h"
+#include "GameRuntime.h"
 
 #include <M5Unified.h>
 #include <StackCubeHal.h>
@@ -10,6 +11,7 @@ namespace {
 SdCard card;
 Catalog catalog;
 Bootloader bootloader;
+GameRuntime runtime;
 NetworkClock network;
 LauncherUi ui(catalog);
 bool displayReady;
@@ -36,8 +38,26 @@ void setup() {
 }
 
 void loop() {
-    const auto& input = stackcube::hal::poll();
     const uint32_t now = millis();
+    if (!bootloader.active()) {
+        const auto change = card.poll(now);
+        if (change != SdCard::Change::None) {
+            if (runtime.active()) {
+                runtime.stop();
+                invalidateLvglDisplay();
+            }
+            updateMedia();
+        }
+    }
+
+    const auto& input = stackcube::hal::poll();
+    if (runtime.active()) {
+        runtime.poll(input);
+        if (!runtime.active()) invalidateLvglDisplay();
+        delay(2);
+        return;
+    }
+
     if (bootloader.active()) {
         bootloader.poll();
         if (bootloader.active()) {
@@ -48,9 +68,6 @@ void loop() {
         } else {
             ui.launchError(bootloader.error().c_str());
         }
-    } else {
-        const auto change = card.poll(now);
-        if (change != SdCard::Change::None) updateMedia();
     }
 
     network.poll();
@@ -61,7 +78,10 @@ void loop() {
         if (game >= 0 && card.mounted() && size_t(game) < catalog.size()) {
             const auto& entry = catalog[game];
             const stackcube::GameLaunch launch{entry.folder, activeSettings.audioOutput, activeSettings.audioLevels};
-            if (bootloader.start(entry.binary.c_str(), launch)) ui.loading(0);
+            if (entry.binary.endsWith(".elf")) {
+                if (runtime.start(entry.binary.c_str(), launch)) return;
+                ui.launchError(runtime.error());
+            } else if (bootloader.start(entry.binary.c_str(), launch)) ui.loading(0);
             else ui.launchError(bootloader.error().c_str());
         }
         Settings settings;

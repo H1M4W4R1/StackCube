@@ -26,10 +26,10 @@ def binary_name(folder):
     data = json.loads(manifest.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{manifest} must contain a JSON object.")
-    name = data.get("binary", "game.bin")
-    if (not isinstance(name, str) or not name.endswith(".bin") or name.startswith(".")
+    name = data.get("binary")
+    if (not isinstance(name, str) or not name.endswith(".elf") or name.startswith(".")
             or len(name.encode("utf-8")) > 120 or any(char in name for char in '/\\:\0')):
-        raise ValueError(f"{manifest} must specify a plain .bin filename.")
+        raise ValueError(f"{manifest} must specify a plain .elf filename.")
     return name
 
 
@@ -73,9 +73,9 @@ def prepare_sd(games_dir):
 
             print(f"Building {project.name}", flush=True)
             subprocess.run([pio, "run", "-d", str(project), "-e", "cores3"], check=True)
-            firmware = project / ".pio" / "build" / "cores3" / "firmware.bin"
+            module = project / ".pio" / "build" / "cores3" / "game.elf"
             shutil.copytree(source, destination)
-            shutil.copyfile(firmware, destination / name)
+            shutil.copyfile(module, destination / name)
 
         publish(staged, dist)
     finally:

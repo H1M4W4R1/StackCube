@@ -28,7 +28,7 @@ bool mountSd();
 const Input& poll();
 bool setRumble(uint8_t slot, uint8_t left, uint8_t right);
 void stopRumble();
-void beginGameAudio(const GameLaunch& launch);
+void beginGameAudio(const GameLaunch& launch); // The launcher owns the SD mount.
 void endGameAudio();
 bool preloadSfx(const char* name);
 bool playSfx(const char* name);

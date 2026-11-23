@@ -1,5 +1,4 @@
 #include <StackCube.h>
-#include <esp_system.h>
 
 #include "Blocks.h"
 
@@ -54,7 +53,7 @@ void drawLayout() {
     screen.fillRect(BoardX, BoardY, BoardWidth, BoardHeight, Grid);
 
     label("STACKCUBE", StatsX, 23, Heading, 2);
-    label("BLOCKS", StatsX, 44, TFT_WHITE, 3);
+    label("BLOCKS", StatsX, 44, White, 3);
     screen.fillRect(StatsX, 85, 162, 198, Panel);
     label("SCORE", StatsX + 12, 96, Heading);
     label("ROWS", StatsX + 12, 141, Heading);
@@ -66,13 +65,13 @@ void drawLayout() {
     screen.fillRect(HelpX, 22, 162, 106, Panel);
     label("NEXT", HelpX + 12, 32, Heading);
     label("MOVE", HelpX, 150, Heading);
-    label("Left / Right", HelpX, 164, TFT_WHITE);
+    label("Left / Right", HelpX, 164, White);
     label("ROTATE", HelpX, 187, Heading);
-    label("Up", HelpX, 201, TFT_WHITE);
+    label("Up", HelpX, 201, White);
     label("SOFT DROP", HelpX, 224, Heading);
-    label("Hold Down", HelpX, 238, TFT_WHITE);
+    label("Hold Down", HelpX, 238, White);
     label("HARD DROP", HelpX, 261, Heading);
-    label("Space / Enter / A", HelpX, 275, TFT_WHITE);
+    label("Space / Enter / A", HelpX, 275, White);
     label("Esc / B to exit", HelpX, 313, Muted);
 }
 
@@ -81,7 +80,7 @@ void drawValue(int y, unsigned value, const char* format = "%u") {
     screen.fillRect(StatsX + 12, y, 138, 24, Panel);
     char text[16];
     std::snprintf(text, sizeof(text), format, value);
-    label(text, StatsX + 12, y + 3, TFT_WHITE, 2);
+    label(text, StatsX + 12, y + 3, White, 2);
 }
 
 void drawStatus() {
@@ -143,10 +142,10 @@ void drawFrame(bool updateStatus = false) {
     if (game.over()) {
         screen.fillRect(BoardX + 2, 147, BoardWidth - 4, 66, Background);
         screen.drawRect(BoardX + 2, 147, BoardWidth - 4, 66, Border);
-        screen.setTextDatum(lgfx::textdatum_t::top_center);
-        label("Game over", 320, 159, TFT_WHITE, 2);
+        screen.setTextAlign(TextAlign::Center);
+        label("Game over", 320, 159, White, 2);
         label("Enter / A to retry", 320, 188, Heading);
-        screen.setTextDatum(lgfx::textdatum_t::top_left);
+        screen.setTextAlign(TextAlign::Left);
     }
     screen.endWrite();
 }
@@ -157,7 +156,7 @@ void startPiece(uint32_t now) {
 }
 
 void restart() {
-    game.reset(esp_random());
+    game.reset(console.random());
     horizontalDirection = 0;
     for (auto& row : drawn) row.fill(255);
     auto& screen = console.screen();
@@ -166,7 +165,7 @@ void restart() {
     drawStatus();
     drawBoard();
     screen.endWrite();
-    startPiece(millis());
+    startPiece(console.millis());
 }
 
 bool moveHorizontal(const Input& input, uint32_t now) {
@@ -226,13 +225,16 @@ void setup() {
 
 void loop() {
     const auto& input = console.poll();
-    if (input.pressed & (Back | Menu)) console.returnToLauncher();
+    if (input.pressed & (Back | Menu)) {
+        console.returnToLauncher();
+        return;
+    }
     if (ready) {
         if (game.over()) {
             if (input.pressed & Accept) restart();
         } else {
-            play(input, millis());
+            play(input, console.millis());
         }
     }
-    delay(4);
+    console.sleep(4);
 }

@@ -1,53 +1,63 @@
 #include "StackCube.h"
-#include <StackCubeHal.h>
 
-#include <esp_ota_ops.h>
+void setup();
+void loop();
 
 namespace stackcube {
 namespace {
-bool selectLauncher() {
-    const auto* launcher = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
-                                                     ESP_PARTITION_SUBTYPE_APP_FACTORY,
-                                                     "launcher");
-    const auto* boot = esp_ota_get_boot_partition();
-    if (!launcher) return false;
-    if (boot && boot->address == launcher->address) return true;
-    const auto result = esp_ota_set_boot_partition(launcher);
-    if (result == ESP_OK) return true;
-    Serial.printf("Could not select launcher: %s\n", esp_err_to_name(result));
-    return false;
+const abi::ServicesV1* services;
+Input frameInput{};
+bool exitRequested;
+
+uint8_t tick(const abi::InputV1* input) {
+    if (exitRequested) return 0;
+    frameInput = *input;
+    loop();
+    return !exitRequested;
 }
 }
 
-bool Console::begin() {
-    Serial.begin(115200);
-    const auto* running = esp_ota_get_running_partition();
-    const bool launchedGame = running && running->subtype == ESP_PARTITION_SUBTYPE_APP_OTA_0;
-    // A reset after SDK initialization should enter the launcher, even after a crash.
-    if (launchedGame && !selectLauncher()) {
-        Serial.println("StackCube recovery could not be armed");
-    }
-    const bool ready = hal::begin();
-    GameLaunch launch;
-    if (ready && launchedGame && launch.load()) hal::beginGameAudio(launch);
-    return ready;
+extern "C" int stackcube_game_entry(int argc, char** argv) {
+    if (argc != 1 || !argv || !argv[0]) return -1;
+    auto& launch = *reinterpret_cast<abi::LaunchV1*>(argv[0]);
+    if (!launch.services || launch.services->version != abi::Version1 ||
+        launch.services->size < sizeof(abi::ServicesV1)) return -1;
+    services = launch.services;
+    launch.game = {setup, tick};
+    return 0;
 }
 
-const Input& Console::poll() { return hal::poll(); }
-M5GFX& Console::screen() { return hal::display(); }
+bool Console::begin() { return services != nullptr; }
+const Input& Console::poll() { return frameInput; }
+uint32_t Console::millis() { return services->millis(); }
+uint32_t Console::random() { return services->random(); }
+void Console::sleep(uint32_t ms) { services->sleep(ms); }
 bool Console::setRumble(uint8_t slot, uint8_t left, uint8_t right) {
-    return hal::setRumble(slot, left, right);
+    return services->setRumble(slot, left, right);
 }
-bool Console::preload_sfx(const char* filename) { return hal::preloadSfx(filename); }
-bool Console::play_sfx(const char* filename) { return hal::playSfx(filename); }
-bool Console::play_bg_track(const char* filename) { return hal::playBgTrack(filename); }
-void Console::stop_bg_track() { hal::stopBgTrack(); }
+bool Console::preload_sfx(const char* filename) { return services->preloadSound(filename); }
+bool Console::play_sfx(const char* filename) { return services->playSound(filename); }
+bool Console::play_bg_track(const char* filename) { return services->playMusic(filename); }
+void Console::stop_bg_track() { services->stopMusic(); }
 
 bool Console::returnToLauncher() {
-    if (!selectLauncher()) return false;
-    hal::stopRumble();
-    hal::endGameAudio();
-    ESP.restart();
+    exitRequested = true;
     return true;
 }
+
+void Screen::startWrite() { services->beginDraw(); }
+void Screen::endWrite() { services->endDraw(); }
+void Screen::fillRect(int x, int y, int w, int h, uint16_t color) {
+    services->fillRect(x, y, w, h, color);
+}
+void Screen::drawRect(int x, int y, int w, int h, uint16_t color) {
+    services->drawRect(x, y, w, h, color);
+}
+void Screen::fillCircle(int x, int y, int radius, uint16_t color) {
+    services->fillCircle(x, y, radius, color);
+}
+void Screen::drawString(const char* text, int x, int y) {
+    services->drawText(text, x, y, textColor, textScale, textAlign == TextAlign::Center);
+}
+
 }

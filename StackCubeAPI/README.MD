@@ -1,22 +1,28 @@
 # StackCube game API
 
-Start with [StackCubeBasicExample](../Games/StackCubeBasicExample/README.MD) and build your game with PlatformIO for CoreS3 using the shared configuration.
+Start with [StackCubeBasicExample](../Games/StackCubeBasicExample/README.MD). Its PlatformIO build produces a native CoreS3 `game.elf` module in `.pio/build/cores3`.
 
 ```powershell
 pio run -d Games/StackCubeBasicExample
 ```
 
-Call `Console::begin()` from `setup()`, then call `Console::poll()` every loop. Draw through `Console::screen()` on the 640 × 360 HDMI surface. If a game opens a drawing transaction, end it before polling, since the screen and input hub share SPI.
+Define `setup()` and `loop()`. The launcher calls `setup()` once per launch and calls `loop()` with a fresh input snapshot. Call `Console::begin()` during setup, then read the current snapshot with `Console::poll()`. Draw through `Console::screen()` on the 640 × 360 RGB565 surface. Pair every `startWrite()` with `endWrite()` before calling services that access USB or SD. Use `Console::millis()`, `Console::random()`, and `Console::sleep()` for timing and randomness.
 
 `Input::held` and `Input::pressed` provide logical buttons across keyboards and controllers. `Input::pads` exposes four per-device slots with buttons and normalized axes. Positive X points right and positive Y points down. The input snapshot also includes the latest new keyboard HID key and US-layout text character, plus relative mouse motion, wheel delta, and button state.
 
-Call `Console::setRumble(slot, left, right)` after polling input to set the two Xbox controller motors. Use the zero-based `Input::pads` slot and strengths from 0 to 255. Set both strengths to zero to stop rumble. The method returns whether a supported controller was available to receive the request. Controller enumeration starts with the motors idle. Rebuild and replace older SD game binaries to update the USB driver bundled in each game.
+Call `Console::setRumble(slot, left, right)` after reading input to set the two Xbox controller motors. Use the zero-based `Input::pads` slot and strengths from 0 to 255. Set both strengths to zero to stop rumble. The method returns whether a supported controller was available to receive the request.
 
-Call `Console::returnToLauncher()` when the player exits. The API lives in `StackCubeAPI`. Launcher code and SD management live in `StackCubeConsole`. The HAL and drivers live in `StackCubeHardware`.
+Call `Console::returnToLauncher()` and return from `loop()` to exit the game. The console stops game audio and rumble, unloads the module, and redraws the launcher.
+
+## Binary compatibility
+
+The SDK links into each game. It binds to the running console through the V1 structures in [`StackCubeAbi.h`](src/StackCubeAbi.h). The console owns the HAL, drivers, and shared SPI bus. Game modules link against the SDK and the listed C runtime imports in `Games/build_game.py`.
+
+Keep V1 field layouts, function signatures, and behavior available in future firmware. Add new features in a separate ABI version when the interface needs to change, with a V1 adapter for published games. Verify each release by launching the same previously built `game.elf` on the new firmware and exercising rendering, input, audio, and exit.
 
 ## Game audio
 
-Put the `.wav` files next to your game's `.gameinfo` and launch the rebuilt game from the updated launcher. Pass the filename, including `.wav`. Use signed 16-bit PCM at **48 kHz**, in mono or stereo. Mono uses 96 KB/s of SD bandwidth and works well for short effects and background tracks.
+Put the `.wav` files next to your game's `.gameinfo`. Pass the filename, including `.wav`. Use signed 16-bit PCM at **48 kHz**, in mono or stereo. Mono uses 96 KB/s of SD bandwidth and works well for short effects and background tracks.
 
 ```powershell
 ffmpeg -i source.ogg -map_metadata -1 -ar 48000 -ac 1 -c:a pcm_s16le background.wav
@@ -36,4 +42,4 @@ console.play_sfx("pickup.wav");
 - `preload_sfx()` loads synchronously and reports whether the effect is ready. Use it in `setup()` or a loading screen. The cache holds up to eight effects and can evict idle clips. A cache miss during gameplay loads the effect in chunks before playing it.
 - `play_bg_track()` and `play_sfx()` report whether the request was accepted. Missing or invalid WAV files are reported over serial during loading. Calls return `false` while the corresponding volume is 0% or output is off or unavailable.
 
-During gameplay, `Console::poll()` services the audio queue with at most one 4 KiB PCM read per call. Four music buffers provide read-ahead across short stalls. Continue polling throughout the game and end display transactions first. Poll at least once per 60 Hz frame to supply stereo music. The game loop handles SD access alongside input and display, while the I²S task mixes and plays from memory independently.
+During gameplay, the console services the audio queue between calls to `loop()`, with at most one 4 KiB PCM read each iteration. Four music buffers provide read-ahead across short stalls. Return promptly from `loop()` so the console can service stereo music at least 60 times per second. The Arduino task handles SD access alongside input and display, while the I²S task on the other core mixes and plays from memory.

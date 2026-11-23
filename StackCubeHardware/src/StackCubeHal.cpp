@@ -17,7 +17,6 @@ constexpr uint8_t TfSwitch = 1 << 4;
 constexpr uint32_t BoardI2cClock = 100000;
 constexpr uint32_t SdTransferClock = 8000000;
 bool audioMounted;
-uint32_t lastAudioProbe;
 }
 
 void prepareSdBus() {
@@ -100,15 +99,7 @@ bool mountSd() {
 const Input& poll() {
     if (audioMounted) hdmi.waitDMA();
     const auto& input = usb::poll();
-    if (audioMounted) {
-        const uint32_t now = millis();
-        if (now - lastAudioProbe >= 100) {
-            lastAudioProbe = now;
-            bool inserted;
-            if (readSdPresence(inserted) && !inserted) endGameAudio();
-        }
-        if (audioMounted) audio::poll();
-    }
+    if (audioMounted) audio::poll();
     return input;
 }
 
@@ -117,24 +108,13 @@ void stopRumble() { usb::stopRumble(); }
 
 void beginGameAudio(const GameLaunch& launch) {
     if (audioMounted || launch.audioOutput == AudioOutput::Off || !launch.audioLevels.audible()) return;
-    bool inserted;
-    if ((readSdPresence(inserted) && !inserted) || !mountSd()) {
-        Serial.println("Audio: game SD card unavailable");
-        return;
-    }
-    if (!audio::begin(launch)) {
-        Serial.println("Audio: could not start output");
-        SD.end();
-        return;
-    }
-    audioMounted = true;
-    lastAudioProbe = millis();
+    audioMounted = audio::begin(launch);
+    if (!audioMounted) Serial.println("Audio: could not start output");
 }
 
 void endGameAudio() {
     if (!audioMounted) return;
     audio::end();
-    SD.end();
     audioMounted = false;
 }
 

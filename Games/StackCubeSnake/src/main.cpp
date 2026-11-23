@@ -1,6 +1,6 @@
 #include <StackCube.h>
 
-#include <esp_system.h>
+#include <cstdio>
 
 using namespace stackcube;
 
@@ -40,7 +40,7 @@ bool occupied(Point point, unsigned count) {
 }
 
 void placeFood() {
-    unsigned skip = esp_random() % (Columns * Rows - length);
+    unsigned skip = console.random() % (Columns * Rows - length);
     for (int y = 0; y < Rows; ++y) {
         for (int x = 0; x < Columns; ++x) {
             if (occupied({x, y}, length)) continue;
@@ -55,8 +55,8 @@ void placeFood() {
 
 void showScore() {
     auto& screen = console.screen();
-    screen.fillRect(380, 10, 192, 24, TFT_BLACK);
-    screen.setTextColor(TFT_WHITE);
+    screen.fillRect(380, 10, 192, 24, Black);
+    screen.setTextColor(White);
     screen.setTextSize(2);
     char text[24];
     snprintf(text, sizeof(text), "Score %u", score);
@@ -66,9 +66,9 @@ void showScore() {
 void reset() {
     auto& screen = console.screen();
     screen.startWrite();
-    screen.fillScreen(TFT_BLACK);
+    screen.fillScreen(Black);
     screen.fillRect(LeftEdge, TopEdge, Columns * Cell, Rows * Cell, Board);
-    screen.setTextColor(TFT_WHITE);
+    screen.setTextColor(White);
     screen.setTextSize(2);
     screen.drawString("Snake", LeftEdge, 13);
     length = 3;
@@ -82,18 +82,18 @@ void reset() {
     placeFood();
     showScore();
     screen.endWrite();
-    lastStep = millis();
+    lastStep = console.millis();
 }
 
 void endGame() {
     ended = true;
     if (!won) console.play_sfx("collision.wav");
     auto& screen = console.screen();
-    screen.fillRect(172, 138, 296, 94, TFT_BLACK);
-    screen.setTextDatum(lgfx::textdatum_t::top_center);
+    screen.fillRect(172, 138, 296, 94, Black);
+    screen.setTextAlign(TextAlign::Center);
     screen.drawString(won ? "Board complete!" : "Game over", 320, 156);
     screen.drawString("Enter / A to restart", 320, 187);
-    screen.setTextDatum(lgfx::textdatum_t::top_left);
+    screen.setTextAlign(TextAlign::Left);
 }
 
 void step() {
@@ -137,7 +137,10 @@ void setup() {
 
 void loop() {
     const auto& input = console.poll();
-    if (input.pressed & (Back | Menu)) console.returnToLauncher();
+    if (input.pressed & (Back | Menu)) {
+        console.returnToLauncher();
+        return;
+    }
     if (ready) {
         if (ended) {
             if (input.pressed & Accept) reset();
@@ -146,12 +149,12 @@ void loop() {
             if (!direction.y && input.pressed & Down) intended = {0, 1};
             if (!direction.x && input.pressed & Left) intended = {-1, 0};
             if (!direction.x && input.pressed & Right) intended = {1, 0};
-            const uint32_t now = millis();
+            const uint32_t now = console.millis();
             if (now - lastStep >= 135) {
                 lastStep = now;
                 step();
             }
         }
     }
-    delay(4);
+    console.sleep(4);
 }
