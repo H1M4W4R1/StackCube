@@ -105,6 +105,12 @@ bool DinPort::beginI2c(uint32_t clockHz) const {
     return din && din->i2cBegin(id, clockHz);
 }
 
+I2cProbeResult DinPort::i2cProbe(uint8_t address) const {
+    if (!services || services->size < sizeof(abi::ServicesV4)) return I2cProbeResult::Unavailable;
+    const auto* extended = reinterpret_cast<const abi::ServicesV4*>(services);
+    return extended->i2cProbe(id, address) ? I2cProbeResult::Acknowledged : I2cProbeResult::NoResponse;
+}
+
 bool DinPort::i2cTransfer(uint8_t address, const uint8_t* tx, uint32_t txSize, uint8_t* rx, uint32_t rxSize) const {
     const auto* din = dinServices();
     return din && din->i2cTransfer(id, address, tx, txSize, rx, rxSize);

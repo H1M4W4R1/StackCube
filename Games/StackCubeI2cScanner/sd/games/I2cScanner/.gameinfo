@@ -1,0 +1,5 @@
+{
+  "title": "I2C Scanner",
+  "binary": "game.elf",
+  "cover": "box.png"
+}

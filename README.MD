@@ -14,3 +14,5 @@ Build the [console firmware](StackCubeConsole/README.MD), then [prepare a FAT32 
 | [StackCubeSnake](Games/StackCubeSnake/README.MD) | Snake built with the game API |
 | [StackCubeBlocks](Games/StackCubeBlocks/README.MD) | Falling-block game with a 10 × 21 board and row-clearing chains |
 | [StackCubeBasicExample](Games/StackCubeBasicExample/README.MD) | Small example for keyboard, mouse, and controller input |
+| [I2C Scanner](Games/StackCubeI2cScanner/README.MD) | Live I²C address matrix for DIN Base Port B or Port C |
+| [UART Console](Games/StackCubeUartConsole/README.MD) | Keyboard-driven DINBase UART monitor and sender |

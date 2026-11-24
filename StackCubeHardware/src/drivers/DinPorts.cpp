@@ -145,6 +145,20 @@ uint8_t i2cBegin(uint8_t id, uint32_t clockHz) {
     return true;
 }
 
+uint8_t i2cProbe(uint8_t id, uint8_t address) {
+    auto* port = getPort(id);
+    if (!port || port->protocol != Protocol::I2c || address > 0x7f || !routeI2c(*port, port->clockHz)) return false;
+
+    alignas(void*) uint8_t buffer[I2C_LINK_RECOMMENDED_SIZE(1)];
+    const auto command = i2c_cmd_link_create_static(buffer, sizeof(buffer));
+    if (!command) return false;
+    const bool acknowledged = i2c_master_start(command) == ESP_OK &&
+        i2c_master_write_byte(command, (address << 1) | I2C_MASTER_WRITE, true) == ESP_OK &&
+        i2c_master_stop(command) == ESP_OK && i2c_master_cmd_begin(ExternalI2c, command, I2cTimeout) == ESP_OK;
+    i2c_cmd_link_delete_static(command);
+    return acknowledged;
+}
+
 uint8_t i2cTransfer(uint8_t id, uint8_t address, const uint8_t* tx, uint32_t txSize,
                     uint8_t* rx, uint32_t rxSize) {
     auto* port = getPort(id);

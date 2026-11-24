@@ -26,7 +26,7 @@ void endDraw() {
 }
 
 constexpr abi::ServicesV1 baseServices{
-    abi::Version1, sizeof(abi::ServicesV3),
+    abi::Version1, sizeof(abi::ServicesV4),
     []() -> uint32_t { return millis(); }, esp_random,
     [](uint32_t ms) { delay(ms); },
     beginDraw, endDraw,
@@ -59,7 +59,7 @@ constexpr abi::ServicesV1 baseServices{
     hal::stopBgTrack,
 };
 
-constexpr abi::ServicesV3 services{
+constexpr abi::ServicesV3 usbServices{
     {baseServices, {
         hal::din::gpioMode, hal::din::gpioRead, hal::din::gpioWrite,
         hal::din::uartBegin, hal::din::uartRead, hal::din::uartWrite,
@@ -74,6 +74,8 @@ constexpr abi::ServicesV3 services{
         return hal::writeUsbGpio(channel, high != 0);
     },
 };
+
+constexpr abi::ServicesV4 services{usbServices, hal::din::i2cProbe};
 
 esp_elf_symbol_table_t imports[] = {
     ESP_ELFSYM_EXPORT(memcpy), ESP_ELFSYM_EXPORT(memmove),
@@ -114,7 +116,7 @@ bool GameRuntime::start(const char* path, const stackcube::GameLaunch& launch) {
     image.reset();
     if (result) return fail("Could not load game module", result);
 
-    stackcube::abi::LaunchV1 request{&services.v2.v1, {}};
+    stackcube::abi::LaunchV1 request{&services.v3.v2.v1, {}};
     char* arguments[] = {reinterpret_cast<char*>(&request), nullptr};
     result = esp_elf_request(&elf, 0, 1, arguments);
     if (result || !request.game.start || !request.game.tick) {
@@ -122,7 +124,7 @@ bool GameRuntime::start(const char* path, const stackcube::GameLaunch& launch) {
     }
 
     game = request.game;
-    Serial.printf("Launching %s with game ABI %u\n", path, unsigned(services.v2.v1.version));
+    Serial.printf("Launching %s with game ABI %u\n", path, unsigned(services.v3.v2.v1.version));
     stackcube::hal::beginGameAudio(launch);
     game.start();
     endDraw();
