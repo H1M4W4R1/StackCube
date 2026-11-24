@@ -5,16 +5,15 @@
 
 namespace blocks {
 namespace {
-// The rightmost group of three bits encodes the top row, starting at the left cell.
+// Each group encodes a row. The top row and its leftmost cell use the low bits.
 constexpr Shape Shapes[PieceTypes] = {
-    {0b000'000'011, 2, 1},
-    {0b000'000'111, 3, 1},
-    {0b000'011'001, 2, 2},
-    {0b000'011'011, 2, 2},
-    {0b000'010'111, 3, 2},
-    {0b000'110'011, 3, 2},
-    {0b000'111'101, 3, 2},
-    {0b010'111'010, 3, 3},
+    {0b0011'0011, 2, 2},  // O
+    {0b1111,      4, 1},  // I
+    {0b0011'0110, 3, 2},  // S
+    {0b0110'0011, 3, 2},  // Z
+    {0b0111'0100, 3, 2},  // L
+    {0b0111'0001, 3, 2},  // J
+    {0b0010'0111, 3, 2},  // T
 };
 
 Piece makePiece(uint8_t type) {
@@ -82,7 +81,7 @@ bool Game::rotate() {
     Shape rotated{0, shape.height, shape.width};
     for (int y = 0; y < shape.height; ++y) {
         for (int x = 0; x < shape.width; ++x) {
-            if (shape.contains(x, y)) rotated.cells |= 1u << (3 * x + shape.height - 1 - y);
+            if (shape.contains(x, y)) rotated.cells |= Shape::bit(shape.height - 1 - y, x);
         }
     }
     if (rotated.cells == shape.cells && rotated.width == shape.width) return false;
@@ -95,7 +94,13 @@ bool Game::rotate() {
         current = candidate;
         return true;
     }
-    return false;
+    // The straight piece can need a third cell of clearance at the right wall or floor.
+    if (rotated.width < Shape::MaxSide && rotated.height < Shape::MaxSide) return false;
+    const Piece candidate{rotated, current.type, std::min(current.x, Columns - rotated.width),
+                          std::min(current.y, Rows - rotated.height)};
+    if (!fits(candidate)) return false;
+    current = candidate;
+    return true;
 }
 
 int Game::landingY() const {

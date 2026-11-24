@@ -8,15 +8,21 @@ namespace blocks {
 
 constexpr int Columns = 10;
 constexpr int Rows = 21;
-constexpr int PieceTypes = 8;
+constexpr int PieceTypes = 7;
 using Field = std::array<std::array<uint8_t, Columns>, Rows>;
 
 struct Shape {
+    static constexpr int MaxSide = 4;
+
     uint16_t cells;
     int width, height;
 
+    static constexpr uint16_t bit(int x, int y) {
+        return 1u << (MaxSide * y + x);
+    }
+
     constexpr bool contains(int x, int y) const {
-        return cells & (1u << (3 * y + x));
+        return cells & bit(x, y);
     }
 };
 

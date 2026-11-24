@@ -16,14 +16,13 @@ constexpr int BoardHeight = blocks::Rows * Cell;
 constexpr int StatsX = 29;
 constexpr int HelpX = 449;
 constexpr uint8_t Ghost = blocks::PieceTypes + 1;
-constexpr uint16_t Background = 0x088F;
-constexpr uint16_t Panel = 0x118F;
-constexpr uint16_t Grid = 0x0868;
-constexpr uint16_t Border = 0x3296;
-constexpr uint16_t Heading = 0x9EBD;
-constexpr uint16_t Muted = 0xB618;
+constexpr uint16_t Panel = 0x18E3;
+constexpr uint16_t Grid = 0x2104;
+constexpr uint16_t Border = 0x73AE;
+constexpr uint16_t Heading = 0xBDF7;
+constexpr uint16_t Muted = 0xAD55;
 constexpr uint16_t Colors[] = {
-    0x110C, 0x2DFA, 0xFFD0, 0x76C8, 0xEED7, 0xFC85, 0xFB1B, 0xB3DF, 0x1E9A, Border,
+    Black, 0xFFD0, 0x2DFA, 0x76C8, 0xFB1B, 0xFC85, 0x1E9A, 0xB3DF, Border,
 };
 static_assert(sizeof(Colors) / sizeof(*Colors) == Ghost + 1);
 
@@ -48,7 +47,7 @@ void label(const char* text, int x, int y, uint16_t color, int size = 1) {
 
 void drawLayout() {
     auto& screen = console.screen();
-    screen.fillScreen(Background);
+    screen.fillScreen(Black);
     screen.fillRect(BoardX - 2, BoardY - 2, BoardWidth + 4, BoardHeight + 4, Border);
     screen.fillRect(BoardX, BoardY, BoardWidth, BoardHeight, Grid);
 
@@ -140,7 +139,7 @@ void drawFrame(bool updateStatus = false) {
     drawBoard();
     if (updateStatus) drawStatus();
     if (game.over()) {
-        screen.fillRect(BoardX + 2, 147, BoardWidth - 4, 66, Background);
+        screen.fillRect(BoardX + 2, 147, BoardWidth - 4, 66, Black);
         screen.drawRect(BoardX + 2, 147, BoardWidth - 4, 66, Border);
         screen.setTextAlign(TextAlign::Center);
         label("Game over", 320, 159, White, 2);
