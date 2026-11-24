@@ -77,13 +77,19 @@ struct ServicesV4 {
     uint8_t (*i2cProbe)(uint8_t port, uint8_t address);
 };
 
+struct ServicesV5 {
+    ServicesV4 v4;
+    uint8_t (*uartConfigure)(uint8_t port, uint32_t baud, uint8_t dataBits, uint8_t parity, uint8_t stopBits);
+    uint8_t (*uartTxIdle)(uint8_t port);
+};
+
 struct InputV2 {
     InputV1 v1;
     uint32_t repeated;
 };
 
 static_assert(offsetof(ServicesV2, v1) == 0 && offsetof(ServicesV3, v2) == 0 &&
-              offsetof(ServicesV4, v3) == 0 && offsetof(InputV2, v1) == 0);
+              offsetof(ServicesV4, v3) == 0 && offsetof(ServicesV5, v4) == 0 && offsetof(InputV2, v1) == 0);
 
 struct GameV1 {
     void (*start)();

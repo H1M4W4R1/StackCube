@@ -17,6 +17,10 @@ constexpr gpio_mode_t PinDirections[] = {
 constexpr gpio_pull_mode_t PinPulls[] = {
     GPIO_FLOATING, GPIO_PULLUP_ONLY, GPIO_PULLDOWN_ONLY, GPIO_FLOATING, GPIO_FLOATING,
 };
+constexpr uart_word_length_t UartDataBits[] = {UART_DATA_5_BITS, UART_DATA_6_BITS, UART_DATA_7_BITS, UART_DATA_8_BITS};
+// Array order matches UartParity and UartStopBits in the SDK.
+constexpr uart_parity_t UartParities[] = {UART_PARITY_DISABLE, UART_PARITY_EVEN, UART_PARITY_ODD};
+constexpr uart_stop_bits_t UartStopBits[] = {UART_STOP_BITS_1, UART_STOP_BITS_1_5, UART_STOP_BITS_2};
 constexpr i2c_port_t ExternalI2c = I2C_NUM_0; // CoreS3 internal I2C is controller 1.
 constexpr TickType_t I2cTimeout = pdMS_TO_TICKS(25);
 
@@ -102,19 +106,32 @@ uint8_t gpioWrite(uint8_t id, uint8_t pin, uint8_t high) {
 }
 
 uint8_t uartBegin(uint8_t id, uint32_t baud) {
+    const auto* port = getPort(id);
+    if (port && port->protocol == Protocol::Uart) {
+        return baud && baud <= UART_BITRATE_MAX && uart_set_baudrate(port->uart, baud) == ESP_OK;
+    }
+    return uartConfigure(id, baud, 8, 0, 0);
+}
+
+uint8_t uartConfigure(uint8_t id, uint32_t baud, uint8_t dataBits, uint8_t parity, uint8_t stopBits) {
     auto* port = getPort(id);
-    if (!canUse(port, Protocol::Uart) || !baud || baud > UART_BITRATE_MAX) return false;
-    const auto uart = port->uart;
-    if (port->protocol == Protocol::Uart) return uart_set_baudrate(uart, baud) == ESP_OK;
-    if (uart_is_driver_installed(uart) || uart_driver_install(uart, 512, 0, 0, nullptr, 0) != ESP_OK) return false;
+    if (!canUse(port, Protocol::Uart) || !baud || baud > UART_BITRATE_MAX || dataBits < 5 || dataBits > 8 ||
+        parity >= sizeof(UartParities) / sizeof(*UartParities) ||
+        stopBits >= sizeof(UartStopBits) / sizeof(*UartStopBits)) return false;
 
     uart_config_t config{};
     config.baud_rate = baud;
-    config.data_bits = UART_DATA_8_BITS;
-    config.parity = UART_PARITY_DISABLE;
-    config.stop_bits = UART_STOP_BITS_1;
+    config.data_bits = UartDataBits[dataBits - 5];
+    config.parity = UartParities[parity];
+    config.stop_bits = UartStopBits[stopBits];
     config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
     config.source_clk = UART_SCLK_APB;
+
+    const auto uart = port->uart;
+    if (port->protocol == Protocol::Uart) {
+        return uartTxIdle(id) && uart_param_config(uart, &config) == ESP_OK;
+    }
+    if (uart_is_driver_installed(uart) || uart_driver_install(uart, 512, 0, 0, nullptr, 0) != ESP_OK) return false;
     if (uart_param_config(uart, &config) != ESP_OK ||
         uart_set_pin(uart, port->pins[Yellow], port->pins[White], UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK) {
         uart_driver_delete(uart);
@@ -135,6 +152,11 @@ int32_t uartWrite(uint8_t id, const uint8_t* data, uint32_t size) {
     const auto* port = getPort(id);
     if (!port || port->protocol != Protocol::Uart || (size && !data) || size > INT32_MAX) return -1;
     return size ? uart_tx_chars(port->uart, reinterpret_cast<const char*>(data), size) : 0;
+}
+
+uint8_t uartTxIdle(uint8_t id) {
+    const auto* port = getPort(id);
+    return port && port->protocol == Protocol::Uart && uart_wait_tx_done(port->uart, 0) == ESP_OK;
 }
 
 uint8_t i2cBegin(uint8_t id, uint32_t clockHz) {

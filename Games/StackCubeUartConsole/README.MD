@@ -4,6 +4,19 @@ Run `pio run -d Games/StackCubeUartConsole` from the repository root to build th
 
 Connect a USB keyboard and wire the selected DINBase port for 3.3 V UART with a common ground. Yellow is StackCube TX, and white is StackCube RX. The console starts on Port B at **115200 baud, 8N1**.
 
+### UART settings
+
+Press each key to cycle its setting. The active settings appear above the receive view and follow you when switching ports. Data bits, parity, and stop bits require the [current console firmware](../../StackCubeConsole/README.MD).
+
+| Key | Setting | Values |
+| --- | --- | --- |
+| F6 | Baud rate | 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600 |
+| F7 | Data bits | 5, 6, 7, 8 |
+| F8 | Parity | None, even, odd |
+| F9 | Stop bits | 1, 1.5, 2 |
+
+### Console controls
+
 | Key | Action |
 | --- | --- |
 | F1 | Switch between Port B and Port C. A successful switch clears the receive view. |

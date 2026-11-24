@@ -22,6 +22,11 @@ const abi::ServicesV3* usbGpioServices() {
         ? reinterpret_cast<const abi::ServicesV3*>(services) : nullptr;
 }
 
+const abi::ServicesV5* uartServices() {
+    return services && services->size >= sizeof(abi::ServicesV5)
+        ? reinterpret_cast<const abi::ServicesV5*>(services) : nullptr;
+}
+
 uint8_t tick(const abi::InputV1* input) {
     if (exitRequested) return 0;
     static_cast<abi::InputV1&>(frameInput) = *input;
@@ -90,6 +95,15 @@ bool DinPort::beginUart(uint32_t baud) const {
     return din && din->uartBegin(id, baud);
 }
 
+bool DinPort::beginUart(const UartSettings& settings) const {
+    if (const auto* uart = uartServices()) {
+        return uart->uartConfigure(id, settings.baud, settings.dataBits, static_cast<uint8_t>(settings.parity),
+                                   static_cast<uint8_t>(settings.stopBits));
+    }
+    return settings.dataBits == 8 && settings.parity == UartParity::None && settings.stopBits == UartStopBits::One &&
+           beginUart(settings.baud);
+}
+
 int32_t DinPort::uartRead(uint8_t* data, uint32_t size) const {
     const auto* din = dinServices();
     return din ? din->uartRead(id, data, size) : -1;
@@ -98,6 +112,11 @@ int32_t DinPort::uartRead(uint8_t* data, uint32_t size) const {
 int32_t DinPort::uartWrite(const uint8_t* data, uint32_t size) const {
     const auto* din = dinServices();
     return din ? din->uartWrite(id, data, size) : -1;
+}
+
+bool DinPort::uartTxIdle() const {
+    const auto* uart = uartServices();
+    return uart && uart->uartTxIdle(id);
 }
 
 bool DinPort::beginI2c(uint32_t clockHz) const {

@@ -43,7 +43,7 @@ if (portC.beginUart(115200)) {
 ```
 
 - **GPIO** supports input, input pull-up, input pull-down, push-pull output and open-drain output. `digitalRead()` returns `0`, `1`, or `-1` on error. `digitalWrite()` returns whether the write succeeded.
-- **UART** uses 8 data bits, no parity and one stop bit. `uartRead()` and `uartWrite()` return the number of bytes read or queued, `0` when none were transferred, or `-1` on error. Retry partial writes in later frames.
+- **UART** opens at 8N1 with `beginUart(baud)`. Pass a `UartSettings` value to `beginUart()` to set 5–8 data bits, none/even/odd parity, and 1, 1.5, or 2 stop bits on current firmware. For example, `portC.beginUart({9600, 7, UartParity::Even, UartStopBits::One})` selects 9600 baud, 7E1. `uartRead()` and `uartWrite()` return the number of bytes read or queued, `0` when none were transferred, or `-1` on error. Retry partial writes in later frames. `uartTxIdle()` returns `true` once the open UART has finished sending. Let pending writes drain before changing settings.
 - **I²C** uses 7-bit controller mode at 10–400 kHz, with 100 kHz as the default. Call `beginI2c()` before `i2cTransfer(address, tx, txSize, rx, rxSize)`. A zero-length side can use `nullptr`. Supplying both buffers performs a write followed by a repeated start and read. A transfer returns `false` on error or timeout. Port B and Port C share one external controller, which the console routes to the selected port for each transfer.
 - **I²C address probes** use `i2cProbe(address)` after `beginI2c()`. A probe sends a START, the address with the write bit, and a STOP. It sends no data bytes. The result is `I2cProbeResult::Acknowledged` for an ACK, `NoResponse` for a NACK or bus error, or `Unavailable` on older firmware. For a general scan, probe `0x08` through `0x77` to skip reserved addresses.
 
@@ -62,7 +62,7 @@ if (level >= 0) console.writeUsbGpio(0, level == 0);
 
 The SDK links into each game. The console owns the HAL, drivers, and shared SPI bus. Game modules link against the SDK and the listed C runtime imports in `Games/build_game.py`.
 
-The V2 services and input in [`StackCubeAbi.h`](src/StackCubeAbi.h) extend the V1 structures at the end. V3 adds USB module GPIO services, and V4 adds I²C address probing. Both use the V2 input layout. The firmware advertises the larger services size through the existing V1 entry point, preserving the layouts and button semantics published games use. On V1 firmware, the newer SDK reports DIN port operations as unavailable and `Input::repeated` is zero. USB module GPIO needs V3 or newer, and I²C address probing needs V4 or newer. Verify each release by launching the same previously built `game.elf` on the new firmware and exercising rendering, input, audio, and exit.
+The V2 services and input in [`StackCubeAbi.h`](src/StackCubeAbi.h) extend the V1 structures at the end. V3 adds USB module GPIO, V4 adds I²C address probing, and V5 adds UART framing and TX-idle reporting. All three use the V2 input layout. The firmware advertises the larger services size through the existing V1 entry point, preserving the layouts and button semantics published games use. On V1 firmware, the newer SDK reports DIN port operations as unavailable and `Input::repeated` is zero. On V2 through V4 firmware, the `UartSettings` overload supports 8N1 and `uartTxIdle()` returns `false`. Verify each release by launching the same previously built `game.elf` on the new firmware and exercising rendering, input, audio, and exit.
 
 ## Game audio
 

@@ -9,11 +9,11 @@ using namespace stackcube;
 using namespace uartconsole;
 
 namespace {
-constexpr uint32_t Baud = 115200;
 constexpr uint32_t PulseMs = 180;
 constexpr uint32_t RedrawMs = 90;
-// Allow the 128-byte TX FIFO and shift register to drain at 115200 8N1.
-constexpr uint32_t TxDrainMs = 12;
+constexpr uint32_t BaudRates[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600};
+constexpr int CharacterWidth = 6;
+constexpr int Margin = 16;
 constexpr uint16_t Panel = 0x1944;
 constexpr uint16_t Line = 0x3aeb;
 constexpr uint16_t Muted = 0xa534;
@@ -23,6 +23,7 @@ constexpr uint16_t Amber = 0xfda5;
 // USB HID keyboard usages supplied by the StackCube input snapshot.
 constexpr uint8_t Enter = 0x28, Backspace = 0x2a, KeypadEnter = 0x58;
 constexpr uint8_t PortKey = 0x3a, SendModeKey = 0x3c, DisplayModeKey = 0x3d, ClearKey = 0x3e;
+constexpr uint8_t BaudKey = 0x3f, DataBitsKey = 0x40, ParityKey = 0x41, StopBitsKey = 0x42;
 
 struct Activity {
     uint32_t last;
@@ -45,6 +46,7 @@ struct Activity {
 Console console;
 ReceiveLog receiveLog;
 DinPortId portId = DinPortId::B;
+UartSettings uartSettings;
 Format sendFormat = Format::Ascii;
 Format displayFormat = Format::Ascii;
 Activity rx{}, tx{};
@@ -53,7 +55,7 @@ uint8_t pending[SendCapacity];
 size_t draftLength, sendOffset, sendLength;
 uint32_t lastLogDraw;
 const char* message;
-bool portOpen, settingsDirty, editorDirty, logDirty, exiting;
+bool portOpen, txDraining, settingsDirty, editorDirty, logDirty, exiting;
 
 void label(const char* text, int x, int y, uint16_t color, uint8_t scale = 1) {
     auto& screen = console.screen();
@@ -74,7 +76,7 @@ void refreshLog(uint32_t now) {
 }
 
 void selectPort(DinPortId requested, uint32_t now) {
-    if (!console.port(requested).beginUart(Baud)) {
+    if (!console.port(requested).beginUart(uartSettings)) {
         if (!portOpen) portId = requested;
         settingsDirty = true;
         setMessage(requested == DinPortId::B ? "Port B unavailable" : "Port C unavailable");
@@ -91,7 +93,53 @@ void selectPort(DinPortId requested, uint32_t now) {
 }
 
 bool txBusy(uint32_t now) {
-    return sendLength || (tx.active && now - tx.last < TxDrainMs);
+    if (sendLength) return true;
+    if (!txDraining) return false;
+    // Older firmware cannot report TX idle. Allow 12 bits per byte for the FIFO and shift register.
+    constexpr uint32_t QueuedBitMs = 129 * 12 * 1000;
+    const uint32_t drainMs = (QueuedBitMs + uartSettings.baud - 1) / uartSettings.baud + 1;
+    txDraining = !console.port(portId).uartTxIdle() && now - tx.last < drainMs;
+    return txDraining;
+}
+
+uint32_t nextBaud(uint32_t baud) {
+    for (const uint32_t rate : BaudRates) {
+        if (rate > baud) return rate;
+    }
+    return BaudRates[0];
+}
+
+void changeUartSetting(uint8_t key, uint32_t now) {
+    if (txBusy(now)) {
+        setMessage("TX busy");
+        return;
+    }
+
+    auto next = uartSettings;
+    switch (key) {
+        case BaudKey:
+            next.baud = nextBaud(next.baud);
+            break;
+        case DataBitsKey:
+            next.dataBits = next.dataBits == 8 ? 5 : next.dataBits + 1;
+            break;
+        case ParityKey:
+            next.parity = next.parity == UartParity::Odd ? UartParity::None
+                : static_cast<UartParity>(static_cast<uint8_t>(next.parity) + 1);
+            break;
+        case StopBitsKey:
+            next.stopBits = next.stopBits == UartStopBits::Two ? UartStopBits::One
+                : static_cast<UartStopBits>(static_cast<uint8_t>(next.stopBits) + 1);
+            break;
+    }
+    if (!console.port(portId).beginUart(next)) {
+        setMessage("UART setting unavailable");
+        return;
+    }
+    uartSettings = next;
+    portOpen = true;
+    settingsDirty = true;
+    setMessage(nullptr);
 }
 
 void queueDraft() {
@@ -125,6 +173,10 @@ char keyboardCharacter(const Input& input) {
 }
 
 void handleKey(const Input& input, uint32_t now) {
+    if (input.key >= BaudKey && input.key <= StopBitsKey) {
+        changeUartSetting(input.key, now);
+        return;
+    }
     switch (input.key) {
         case PortKey:
             if (txBusy(now)) setMessage("TX busy");
@@ -186,7 +238,8 @@ void serviceUart(uint32_t now) {
         setMessage("UART write failed");
         sendLength = sendOffset = 0;
     } else if (written > 0) {
-        tx.flash(now);
+        tx.flash(console.millis());
+        txDraining = true;
         sendOffset += written;
         if (sendOffset == sendLength) sendOffset = sendLength = 0;
     }
@@ -196,11 +249,15 @@ void drawSettings() {
     auto& screen = console.screen();
     screen.fillRect(0, 43, screen.width(), 24, ReceiveLog::Background);
     char settings[40];
-    std::snprintf(settings, sizeof(settings), "Port %c  /  %lu 8N1%s", portId == DinPortId::B ? 'B' : 'C',
-                  static_cast<unsigned long>(Baud), portOpen ? "" : "  /  CLOSED");
-    label(settings, 16, 52, portOpen ? Muted : Amber);
-    std::snprintf(settings, sizeof(settings), "Display  %s", formatName(displayFormat));
-    label(settings, 492, 52, Mint);
+    constexpr char ParityNames[] = "NEO";
+    constexpr char StopBitNames[][4] = {"1", "1.5", "2"};
+    std::snprintf(settings, sizeof(settings), "Port %c  /  %lu %u%c%s%s", portId == DinPortId::B ? 'B' : 'C',
+                  static_cast<unsigned long>(uartSettings.baud), static_cast<unsigned>(uartSettings.dataBits),
+                  ParityNames[static_cast<uint8_t>(uartSettings.parity)],
+                  StopBitNames[static_cast<uint8_t>(uartSettings.stopBits)], portOpen ? "" : "  /  CLOSED");
+    label(settings, Margin, 52, portOpen ? Muted : Amber);
+    const int width = std::snprintf(settings, sizeof(settings), "Display  %s", formatName(displayFormat)) * CharacterWidth;
+    label(settings, screen.width() - Margin - width, 52, Mint);
 }
 
 void drawEditor() {
@@ -211,7 +268,7 @@ void drawEditor() {
     label(title, 16, 290, Mint);
     if (message) label(message, 172, 290, Amber);
     label(draft, 16, 309, White);
-    screen.fillRect(16 + 6 * draftLength, 317, 5, 1, Mint);
+    screen.fillRect(Margin + CharacterWidth * draftLength, 317, 5, 1, Mint);
 }
 
 void draw(uint32_t now) {
@@ -251,7 +308,8 @@ void setup() {
     label("TX", 588, 17, Muted);
     screen.fillCircle(548, 21, 4, Line);
     screen.fillCircle(612, 21, 4, Line);
-    label("F1 Port   F3 Send mode   F4 Display mode   F5 Clear RX   Enter Send   Esc Exit", 16, 341, Muted);
+    label("F1 Port   F3 Send mode   F4 Display mode   F5 Clear RX   Enter Send   Esc Exit", Margin, 334, Muted);
+    label("F6 Baud   F7 Data bits   F8 Parity         F9 Stop bits", Margin, 347, Muted);
     screen.endWrite();
     editorDirty = true;
     draw(now);
@@ -267,5 +325,5 @@ void loop() {
     }
     if (!exiting) handleKey(input, now);
     serviceUart(now);
-    draw(now);
+    draw(console.millis());
 }

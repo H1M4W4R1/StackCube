@@ -20,6 +20,15 @@ enum class DinPortId : uint8_t { B = 0, C = 1 };
 enum class DinPin : uint8_t { Yellow = 0, White = 1 };
 enum class PinMode : uint8_t { Input = 0, InputPullUp = 1, InputPullDown = 2, Output = 3, OpenDrain = 4 };
 enum class I2cProbeResult : uint8_t { NoResponse, Acknowledged, Unavailable };
+enum class UartParity : uint8_t { None, Even, Odd };
+enum class UartStopBits : uint8_t { One, OneAndHalf, Two };
+
+struct UartSettings {
+    uint32_t baud = 115200;
+    uint8_t dataBits = 8;
+    UartParity parity = UartParity::None;
+    UartStopBits stopBits = UartStopBits::One;
+};
 
 class DinPort {
 public:
@@ -27,8 +36,10 @@ public:
     int32_t digitalRead(DinPin pin) const;
     bool digitalWrite(DinPin pin, bool high) const;
     bool beginUart(uint32_t baud = 115200) const;
+    bool beginUart(const UartSettings& settings) const;
     int32_t uartRead(uint8_t* data, uint32_t size) const;
     int32_t uartWrite(const uint8_t* data, uint32_t size) const;
+    bool uartTxIdle() const;
     bool beginI2c(uint32_t clockHz = 100000) const;
     I2cProbeResult i2cProbe(uint8_t address) const;
     bool i2cTransfer(uint8_t address, const uint8_t* tx, uint32_t txSize, uint8_t* rx, uint32_t rxSize) const;
