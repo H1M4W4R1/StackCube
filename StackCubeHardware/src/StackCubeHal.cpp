@@ -103,6 +103,21 @@ const Input& poll() {
     return input;
 }
 
+int32_t readUsbGpio(uint8_t channel) {
+    hdmi.waitDMA();
+    return usb::readGpio(channel);
+}
+
+bool writeUsbGpio(uint8_t channel, bool high) {
+    hdmi.waitDMA();
+    return usb::writeGpio(channel, high);
+}
+
+void resetUsbGpioOutputs() {
+    hdmi.waitDMA();
+    usb::resetGpioOutputs();
+}
+
 bool setRumble(uint8_t slot, uint8_t left, uint8_t right) { return usb::setRumble(slot, left, right); }
 void stopRumble() { usb::stopRumble(); }
 

@@ -26,7 +26,7 @@ void endDraw() {
 }
 
 constexpr abi::ServicesV1 baseServices{
-    abi::Version1, sizeof(abi::ServicesV2),
+    abi::Version1, sizeof(abi::ServicesV3),
     []() -> uint32_t { return millis(); }, esp_random,
     [](uint32_t ms) { delay(ms); },
     beginDraw, endDraw,
@@ -59,11 +59,21 @@ constexpr abi::ServicesV1 baseServices{
     hal::stopBgTrack,
 };
 
-constexpr abi::ServicesV2 services{baseServices, {
-    hal::din::gpioMode, hal::din::gpioRead, hal::din::gpioWrite,
-    hal::din::uartBegin, hal::din::uartRead, hal::din::uartWrite,
-    hal::din::i2cBegin, hal::din::i2cTransfer, hal::din::end,
-}};
+constexpr abi::ServicesV3 services{
+    {baseServices, {
+        hal::din::gpioMode, hal::din::gpioRead, hal::din::gpioWrite,
+        hal::din::uartBegin, hal::din::uartRead, hal::din::uartWrite,
+        hal::din::i2cBegin, hal::din::i2cTransfer, hal::din::end,
+    }},
+    [](uint8_t channel) -> int32_t {
+        endDraw();
+        return hal::readUsbGpio(channel);
+    },
+    [](uint8_t channel, uint8_t high) -> uint8_t {
+        endDraw();
+        return hal::writeUsbGpio(channel, high != 0);
+    },
+};
 
 esp_elf_symbol_table_t imports[] = {
     ESP_ELFSYM_EXPORT(memcpy), ESP_ELFSYM_EXPORT(memmove),
@@ -104,7 +114,7 @@ bool GameRuntime::start(const char* path, const stackcube::GameLaunch& launch) {
     image.reset();
     if (result) return fail("Could not load game module", result);
 
-    stackcube::abi::LaunchV1 request{&services.v1, {}};
+    stackcube::abi::LaunchV1 request{&services.v2.v1, {}};
     char* arguments[] = {reinterpret_cast<char*>(&request), nullptr};
     result = esp_elf_request(&elf, 0, 1, arguments);
     if (result || !request.game.start || !request.game.tick) {
@@ -112,7 +122,7 @@ bool GameRuntime::start(const char* path, const stackcube::GameLaunch& launch) {
     }
 
     game = request.game;
-    Serial.printf("Launching %s with game ABI %u\n", path, unsigned(services.v1.version));
+    Serial.printf("Launching %s with game ABI %u\n", path, unsigned(services.v2.v1.version));
     stackcube::hal::beginGameAudio(launch);
     game.start();
     endDraw();
@@ -132,13 +142,16 @@ void GameRuntime::stop() {
     esp_elf_deinit(&elf);
     endDraw();
     stackcube::hal::din::endAll();
+    stackcube::hal::resetUsbGpioOutputs();
     stackcube::hal::stopRumble();
     stackcube::hal::endGameAudio();
 }
 
 bool GameRuntime::fail(const char* message, int result) {
     esp_elf_deinit(&elf);
+    endDraw();
     stackcube::hal::din::endAll();
+    stackcube::hal::resetUsbGpioOutputs();
     failure = message;
     Serial.printf("%s (%d)\n", message, result);
     return false;

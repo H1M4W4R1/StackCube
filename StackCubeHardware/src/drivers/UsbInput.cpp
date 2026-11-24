@@ -12,6 +12,8 @@ namespace stackcube::usb {
 namespace {
 constexpr uint32_t RetryIntervalMs = 1000;
 constexpr uint32_t EnumerationTimeoutMs = 2000;
+constexpr uint8_t GpioChannels = 5;
+constexpr uint8_t GpioOutputMask = (1u << GpioChannels) - 1;
 USB host;
 USBHub hub(&host);
 USBHub secondHub(&host);
@@ -21,6 +23,13 @@ bool ready;
 uint32_t retryAt;
 uint32_t stateSince;
 uint8_t lastHostState;
+uint8_t gpioOutputs;
+
+void applyGpioOutputs() {
+    const uint8_t current = host.gpioRdOutput();
+    const uint8_t updated = (current & ~GpioOutputMask) | gpioOutputs;
+    if (updated != current) host.gpioWr(updated);
+}
 
 uint32_t keyboardButton(uint8_t key) {
     switch (key) {
@@ -308,6 +317,7 @@ void serviceHost() {
 bool begin() {
     host.setUsbTaskState(USB_DETACHED_SUBSTATE_INITIALIZE);
     ready = host.Init() == 0;
+    if (ready) applyGpioOutputs();
     lastHostState = host.getUsbTaskState();
     stateSince = millis();
     retryAt = stateSince + RetryIntervalMs;
@@ -359,6 +369,28 @@ const Input& poll() {
     input.repeated = buttonRepeat.update(held, input.pressed, millis());
     input.held = held;
     return input;
+}
+
+int32_t readGpio(uint8_t channel) {
+    if (!ready || channel >= GpioChannels) return -1;
+    return (host.gpioRd() >> channel) & 1;
+}
+
+bool writeGpio(uint8_t channel, bool high) {
+    if (!ready || channel >= GpioChannels) return false;
+    const uint8_t bit = 1u << channel;
+    const uint8_t updated = high ? gpioOutputs | bit : gpioOutputs & ~bit;
+    if (updated != gpioOutputs) {
+        gpioOutputs = updated;
+        applyGpioOutputs();
+    }
+    return true;
+}
+
+void resetGpioOutputs() {
+    if (!gpioOutputs) return;
+    gpioOutputs = 0;
+    if (ready) applyGpioOutputs();
 }
 
 bool setRumble(uint8_t slot, uint8_t left, uint8_t right) {

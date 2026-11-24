@@ -26,6 +26,9 @@ bool readSdPresence(bool& inserted);
 bool restartSdPower();
 bool mountSd();
 const Input& poll();
+int32_t readUsbGpio(uint8_t channel);
+bool writeUsbGpio(uint8_t channel, bool high);
+void resetUsbGpioOutputs();
 bool setRumble(uint8_t slot, uint8_t left, uint8_t right);
 void stopRumble();
 void beginGameAudio(const GameLaunch& launch); // The launcher owns the SD mount.

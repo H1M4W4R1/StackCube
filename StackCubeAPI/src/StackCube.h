@@ -77,6 +77,8 @@ public:
     uint32_t random();
     void sleep(uint32_t ms);
     bool setRumble(uint8_t slot, uint8_t left, uint8_t right);
+    int32_t readUsbGpio(uint8_t channel);
+    bool writeUsbGpio(uint8_t channel, bool high);
     bool preload_sfx(const char* filename);
     bool play_sfx(const char* filename);
     bool play_bg_track(const char* filename);

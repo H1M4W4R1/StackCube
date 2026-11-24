@@ -4,6 +4,8 @@ Stack bottom to top as Base DIN → USB v1.2 (M020-V12) → Display 13.2 (M126) 
 
 Base DIN ports are available with standard M126 firmware. Port B exposes GPIO9 (yellow) and GPIO8 (white). Port C exposes GPIO17 (yellow) and GPIO18 (white). In UART mode, yellow is TX and white is RX. In I²C mode, yellow is SDA and white is SCL. See the [game API port guide](StackCubeAPI/README.MD#din-base-ports) and [M5Stack Base DIN pinout](https://docs.m5stack.com/en/base/Base_DIN).
 
+The USB v1.2 module exposes five 3.3 V inputs and five 3.3 V outputs through its MAX3421E. Use the printed channel numbers `0` through `4` on the `IN` and `OUT` headers. `G` is ground and `5V` is a supply pin. [USB GPIO game API](StackCubeAPI/README.MD#usb-module-gpio) · [M5Stack module pinout](https://docs.m5stack.com/en/module/Module_USB_v1.2)
+
 - Power from Base DIN (9–24 V DC). DIN switch ON, display switch OFF, display DC jack unplugged.
 - With DIN OFF and DC unplugged, slide USB SS 2 (`G5`) and INT 1 (`G35`) toward `ON`. Set all other USB DIPs OFF.
 - USB CS is GPIO1, USB INT is GPIO10, and display CS is GPIO7. Serialize transfers on shared SPI (MOSI GPIO37, MISO GPIO35, SCK GPIO36).

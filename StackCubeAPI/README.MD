@@ -46,11 +46,22 @@ if (portC.beginUart(115200)) {
 - **UART** uses 8 data bits, no parity and one stop bit. `uartRead()` and `uartWrite()` return the number of bytes read or queued, `0` when none were transferred, or `-1` on error. Retry partial writes in later frames.
 - **I²C** uses 7-bit controller mode at 10–400 kHz, with 100 kHz as the default. Call `beginI2c()` before `i2cTransfer(address, tx, txSize, rx, rxSize)`. A zero-length side can use `nullptr`. Supplying both buffers performs a write followed by a repeated start and read. A transfer returns `false` on error or timeout. Port B and Port C share one external controller, which the console routes to the selected port for each transfer.
 
+## USB module GPIO
+
+The M5Stack USB v1.2 module has separate `IN` and `OUT` headers with channels `0` through `4` on each. `console.readUsbGpio(channel)` reads the `IN` header and returns `0`, `1`, or `-1` if the channel or module is unavailable. `console.writeUsbGpio(channel, high)` drives the `OUT` header and returns whether the request was accepted. The pin directions are fixed. [Module pinout](https://docs.m5stack.com/en/module/Module_USB_v1.2)
+
+Use 3.3 V logic and a common ground. The inputs have internal pull-ups, so a button wired between `IN 0` and `G` reads low while held. Read it each time through `loop()` for continuous input. Call the GPIO methods outside display write batches. The console drives the outputs low on game exit. [MAX3421E datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/MAX3421E.pdf)
+
+```cpp
+const int32_t level = console.readUsbGpio(0);
+if (level >= 0) console.writeUsbGpio(0, level == 0);
+```
+
 ## Binary compatibility
 
 The SDK links into each game. The console owns the HAL, drivers, and shared SPI bus. Game modules link against the SDK and the listed C runtime imports in `Games/build_game.py`.
 
-The V2 services and input in [`StackCubeAbi.h`](src/StackCubeAbi.h) extend the V1 structures at the end. The firmware advertises the larger services size through the existing V1 entry point, so published V1 games still use their original layouts and button semantics. On V1 firmware, the newer SDK reports port operations as unavailable and `Input::repeated` is zero. Verify each release by launching the same previously built `game.elf` on the new firmware and exercising rendering, input, audio, and exit.
+The V2 services and input in [`StackCubeAbi.h`](src/StackCubeAbi.h) extend the V1 structures at the end. V3 adds USB module GPIO services and uses the V2 input layout. The firmware advertises the larger services size through the existing V1 entry point, preserving the layouts and button semantics published games use. On V1 firmware, the newer SDK reports DIN port operations as unavailable and `Input::repeated` is zero. USB module GPIO reports unavailable on V1 and V2 firmware. Verify each release by launching the same previously built `game.elf` on the new firmware and exercising rendering, input, audio, and exit.
 
 ## Game audio
 

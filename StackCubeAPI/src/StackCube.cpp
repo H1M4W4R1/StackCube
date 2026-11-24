@@ -17,6 +17,11 @@ const abi::DinServices* dinServices() {
     return hasServicesV2() ? &reinterpret_cast<const abi::ServicesV2*>(services)->din : nullptr;
 }
 
+const abi::ServicesV3* usbGpioServices() {
+    return services && services->size >= sizeof(abi::ServicesV3)
+        ? reinterpret_cast<const abi::ServicesV3*>(services) : nullptr;
+}
+
 uint8_t tick(const abi::InputV1* input) {
     if (exitRequested) return 0;
     static_cast<abi::InputV1&>(frameInput) = *input;
@@ -44,6 +49,17 @@ void Console::sleep(uint32_t ms) { services->sleep(ms); }
 bool Console::setRumble(uint8_t slot, uint8_t left, uint8_t right) {
     return services->setRumble(slot, left, right);
 }
+
+int32_t Console::readUsbGpio(uint8_t channel) {
+    const auto* usb = usbGpioServices();
+    return usb ? usb->readUsbGpio(channel) : -1;
+}
+
+bool Console::writeUsbGpio(uint8_t channel, bool high) {
+    const auto* usb = usbGpioServices();
+    return usb && usb->writeUsbGpio(channel, high);
+}
+
 bool Console::preload_sfx(const char* filename) { return services->preloadSound(filename); }
 bool Console::play_sfx(const char* filename) { return services->playSound(filename); }
 bool Console::play_bg_track(const char* filename) { return services->playMusic(filename); }

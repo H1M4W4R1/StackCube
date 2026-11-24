@@ -66,12 +66,18 @@ struct ServicesV2 {
     DinServices din;
 };
 
+struct ServicesV3 {
+    ServicesV2 v2;
+    int32_t (*readUsbGpio)(uint8_t channel);
+    uint8_t (*writeUsbGpio)(uint8_t channel, uint8_t high);
+};
+
 struct InputV2 {
     InputV1 v1;
     uint32_t repeated;
 };
 
-static_assert(offsetof(ServicesV2, v1) == 0 && offsetof(InputV2, v1) == 0);
+static_assert(offsetof(ServicesV2, v1) == 0 && offsetof(ServicesV3, v2) == 0 && offsetof(InputV2, v1) == 0);
 
 struct GameV1 {
     void (*start)();
