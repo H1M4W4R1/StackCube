@@ -7,6 +7,9 @@ namespace {
 using namespace stackcube;
 constexpr int Width = hal::Width;
 constexpr int Height = hal::Height;
+constexpr int ScreenInset = 22;
+constexpr int StatusRowTop = 17;
+constexpr int HeaderHeight = 49;
 constexpr int Pitch = 131;
 constexpr int CoverWidth = 112;
 constexpr int CoverHeight = 162;
@@ -127,7 +130,7 @@ void LauncherUi::begin() {
 
 void LauncherUi::makeHome(lv_obj_t* root) {
     auto* statusIcons = panel(root, LV_SIZE_CONTENT, lv_font_montserrat_16.line_height, 0, 0, Background);
-    lv_obj_align(statusIcons, LV_ALIGN_TOP_RIGHT, -79, 17);
+    lv_obj_align(statusIcons, LV_ALIGN_TOP_RIGHT, -79, StatusRowTop);
     lv_obj_set_flex_flow(statusIcons, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(statusIcons, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(statusIcons, 8, 0);
@@ -139,8 +142,8 @@ void LauncherUi::makeHome(lv_obj_t* root) {
     wifi = label(statusIcons, LV_SYMBOL_WIFI, &lv_font_montserrat_16, Muted);
     lv_obj_set_style_text_opa(wifi, LV_OPA_50, 0);
     clock = label(root, "--:--", &lv_font_montserrat_16, Text);
-    lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -22, 17);
-    panel(root, Width - 44, 1, 22, 48, Line);
+    lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -ScreenInset, StatusRowTop);
+    panel(root, Width - 2 * ScreenInset, 1, ScreenInset, HeaderHeight - 1, Line);
 
     auto* carousel = panel(root, Width, 183, 0, 64, Background);
     for (int offset = -2; offset <= 2; ++offset) {
@@ -189,25 +192,27 @@ void LauncherUi::makeHome(lv_obj_t* root) {
 }
 
 void LauncherUi::makeSettings(lv_obj_t* root) {
+    constexpr int fieldX = 182;
+    constexpr int fieldWidth = Width - ScreenInset - fieldX;
+    constexpr int rowTop = 8;
+    constexpr int rowPitch = 40;
+    constexpr int fieldHeight = 34;
+    const int labelOffset = (fieldHeight - lv_font_montserrat_14.line_height) / 2;
+
     group = lv_group_create();
-    settingsPanel = panel(root, Width, Height - 49, 0, 49, Background);
-    lv_obj_set_pos(label(settingsPanel, "Settings", &lv_font_montserrat_20, Text), 22, 13);
-    save = button(settingsPanel, "Save", 78, 182, 255);
-    back = button(settingsPanel, "Back", 78, 270, 255);
-    lv_obj_add_event_cb(save, [](lv_event_t* event) {
-        static_cast<LauncherUi*>(lv_event_get_user_data(event))->saving = true;
-    }, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(back, [](lv_event_t* event) {
-        static_cast<LauncherUi*>(lv_event_get_user_data(event))->showSettings(false);
-    }, LV_EVENT_CLICKED, this);
+    settingsTitle = label(root, "Settings", &lv_font_montserrat_20, Text);
+    const int titleOffset = (lv_font_montserrat_16.line_height - lv_font_montserrat_20.line_height) / 2;
+    lv_obj_set_pos(settingsTitle, ScreenInset, StatusRowTop + titleOffset);
+    lv_obj_add_flag(settingsTitle, LV_OBJ_FLAG_HIDDEN);
+    settingsPanel = panel(root, Width, Height - HeaderHeight, 0, HeaderHeight, Background);
     constexpr const char* names[] = {"Wi-Fi network", "Wi-Fi password"};
     constexpr unsigned max[] = {32, 64};
     for (unsigned i = 0; i < std::size(fields); ++i) {
-        const int y = 51 + 40 * i;
-        lv_obj_set_pos(label(settingsPanel, names[i], &lv_font_montserrat_14, Text), 22, y + 9);
+        const int y = rowTop + rowPitch * i;
+        lv_obj_set_pos(label(settingsPanel, names[i], &lv_font_montserrat_14, Text), ScreenInset, y + labelOffset);
         auto* field = fields[i] = lv_textarea_create(settingsPanel);
-        lv_obj_set_size(field, 436, 34);
-        lv_obj_set_pos(field, 182, y);
+        lv_obj_set_size(field, fieldWidth, fieldHeight);
+        lv_obj_set_pos(field, fieldX, y);
         lv_obj_set_style_pad_top(field, 6, 0);
         lv_obj_set_style_pad_bottom(field, 6, 0);
         lv_obj_set_style_bg_color(field, lv_color_hex(Surface), 0);
@@ -221,20 +226,25 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
     }
     lv_textarea_set_password_mode(fields[1], true);
     lv_textarea_set_placeholder_text(fields[0], "Leave blank to disable Wi-Fi");
-    lv_obj_set_pos(label(settingsPanel, "Time zone", &lv_font_montserrat_14, Text), 22, 141);
+    constexpr int timeZoneY = rowTop + 2 * rowPitch;
+    constexpr int audioOutputY = timeZoneY + rowPitch;
+    lv_obj_set_pos(label(settingsPanel, "Time zone", &lv_font_montserrat_14, Text), ScreenInset, timeZoneY + labelOffset);
     region = lv_dropdown_create(settingsPanel);
     city = lv_dropdown_create(settingsPanel);
-    lv_obj_set_pos(label(settingsPanel, "Audio output", &lv_font_montserrat_14, Text), 22, 184);
+    lv_obj_set_pos(label(settingsPanel, "Audio output", &lv_font_montserrat_14, Text), ScreenInset, audioOutputY + labelOffset);
     audio = lv_dropdown_create(settingsPanel);
     lv_dropdown_set_options_static(audio, "Built-in speaker\nHDMI\nOff");
-    lv_obj_set_pos(audio, 182, 174);
-    lv_obj_set_width(audio, 260);
-    lv_obj_set_pos(region, 182, 131);
-    lv_obj_set_pos(city, 366, 131);
-    lv_obj_set_width(region, 172);
-    lv_obj_set_width(city, 252);
+    constexpr int regionWidth = 172;
+    constexpr int cityOffset = regionWidth + 12;
+    lv_obj_set_pos(region, fieldX, timeZoneY);
+    lv_obj_set_pos(city, fieldX + cityOffset, timeZoneY);
+    lv_obj_set_pos(audio, fieldX, audioOutputY);
+    lv_obj_set_size(region, regionWidth, fieldHeight);
+    lv_obj_set_size(city, fieldWidth - cityOffset, fieldHeight);
+    lv_obj_set_size(audio, 260, fieldHeight);
     for (auto* dropdown : {region, city, audio}) {
         lv_dropdown_set_dir(dropdown, LV_DIR_BOTTOM);
+        lv_obj_set_style_pad_ver(dropdown, 7, 0);
         lv_obj_set_style_bg_color(dropdown, lv_color_hex(Surface), 0);
         lv_obj_add_event_cb(dropdown, [](lv_event_t* event) {
             auto* ui = static_cast<LauncherUi*>(lv_event_get_user_data(event));
@@ -250,15 +260,23 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
     }, LV_EVENT_VALUE_CHANGED, this);
 
     constexpr const char* volumeLabels[] = {"Master volume", "Music volume", "Effects volume"};
+    constexpr int volumeTop = audioOutputY + fieldHeight + 18;
+    constexpr int volumePitch = 30;
+    constexpr int valueWidth = 44;
+    constexpr int valueX = Width - ScreenInset - valueWidth;
+    constexpr int sliderHeight = 8;
+    const int volumeLabelOffset = lv_font_montserrat_14.line_height / 2;
     for (unsigned i = 0; i < std::size(volumeControls); ++i) {
         auto& control = volumeControls[i];
-        const int x = 22 + 198 * i;
-        lv_obj_set_pos(label(settingsPanel, volumeLabels[i], &lv_font_montserrat_14, Text), x, 216);
+        const int y = volumeTop + volumePitch * i;
+        lv_obj_set_pos(label(settingsPanel, volumeLabels[i], &lv_font_montserrat_14, Text), ScreenInset, y - volumeLabelOffset);
         control.value = label(settingsPanel, "", &lv_font_montserrat_14, Text);
-        lv_obj_set_pos(control.value, x + 133, 216);
+        lv_obj_set_width(control.value, valueWidth);
+        lv_obj_set_style_text_align(control.value, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_pos(control.value, valueX, y - volumeLabelOffset);
         auto* slider = control.slider = lv_slider_create(settingsPanel);
-        lv_obj_set_pos(slider, x + 3, 237);
-        lv_obj_set_size(slider, 157, 8);
+        lv_obj_set_pos(slider, fieldX, y - sliderHeight / 2);
+        lv_obj_set_size(slider, valueX - fieldX - 12, sliderHeight);
         lv_slider_set_range(slider, 0, MaxAudioVolume);
         lv_obj_set_style_bg_color(slider, lv_color_hex(Line), LV_PART_MAIN);
         lv_obj_set_style_bg_color(slider, lv_color_hex(Accent), LV_PART_INDICATOR);
@@ -272,10 +290,22 @@ void LauncherUi::makeSettings(lv_obj_t* root) {
         lv_group_add_obj(group, slider);
     }
 
+    constexpr int buttonWidth = 78;
+    constexpr int buttonGap = 10;
+    constexpr int buttonX = (Width - 2 * buttonWidth - buttonGap) / 2;
+    constexpr int buttonY = Height - HeaderHeight - 53;
+    auto* save = button(settingsPanel, "Save", buttonWidth, buttonX, buttonY);
+    auto* back = button(settingsPanel, "Back", buttonWidth, buttonX + buttonWidth + buttonGap, buttonY);
+    lv_obj_add_event_cb(save, [](lv_event_t* event) {
+        static_cast<LauncherUi*>(lv_event_get_user_data(event))->saving = true;
+    }, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(back, [](lv_event_t* event) {
+        static_cast<LauncherUi*>(lv_event_get_user_data(event))->showSettings(false);
+    }, LV_EVENT_CLICKED, this);
     lv_group_add_obj(group, save);
     lv_group_add_obj(group, back);
     settingsStatus = label(settingsPanel, "", &lv_font_montserrat_12, Muted);
-    lv_obj_set_pos(settingsStatus, 182, 292);
+    lv_obj_align(settingsStatus, LV_ALIGN_BOTTOM_MID, 0, -3);
 
     keyboard = lv_keyboard_create(settingsPanel);
     lv_obj_set_size(keyboard, Width, 123);
@@ -312,6 +342,7 @@ void LauncherUi::showSettings(bool show) {
     for (auto* dropdown : {region, city, audio}) {
         if (lv_dropdown_is_open(dropdown)) sendKey(dropdown, LV_KEY_ESC);
     }
+    setVisible(settingsTitle, show);
     if (!show) {
         lv_obj_add_flag(settingsPanel, LV_OBJ_FLAG_HIDDEN);
         return;
@@ -602,7 +633,7 @@ void LauncherUi::readPointer(lv_indev_data_t* data) const {
 void LauncherUi::status(bool online, const char* time) {
     if (strcmp(lv_label_get_text(clock), time)) {
         lv_label_set_text(clock, time);
-        lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -22, 17);
+        lv_obj_align(clock, LV_ALIGN_TOP_RIGHT, -ScreenInset, StatusRowTop);
     }
     if (online == wifiOnline) return;
     wifiOnline = online;

@@ -60,6 +60,7 @@ private:
     lv_obj_t* wifi = nullptr;
     lv_obj_t* clock = nullptr;
     lv_obj_t* cursor = nullptr;
+    lv_obj_t* settingsTitle = nullptr;
     lv_obj_t* settingsPanel = nullptr;
     lv_obj_t* settingsStatus = nullptr;
     lv_obj_t* fields[2] = {};
@@ -70,8 +71,6 @@ private:
         lv_obj_t* slider = nullptr;
         lv_obj_t* value = nullptr;
     } volumeControls[3];
-    lv_obj_t* save = nullptr;
-    lv_obj_t* back = nullptr;
     lv_obj_t* keyboard = nullptr;
     lv_obj_t* textField = nullptr;
     lv_group_t* group = nullptr;
