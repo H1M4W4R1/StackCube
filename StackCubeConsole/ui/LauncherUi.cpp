@@ -94,6 +94,14 @@ int directionOf(uint32_t buttons) {
     return buttons & (Left | Up) ? -1 : buttons & (Right | Down) ? 1 : 0;
 }
 
+uint8_t arrowKey(uint32_t buttons) {
+    if (buttons & Left) return 0x50;
+    if (buttons & Up) return 0x52;
+    if (buttons & Right) return 0x4f;
+    if (buttons & Down) return 0x51;
+    return 0;
+}
+
 void sendKey(lv_obj_t* dropdown, uint32_t key) {
     lv_event_send(dropdown, LV_EVENT_KEY, &key);
 }
@@ -545,7 +553,7 @@ void LauncherUi::handle(const Input& input, uint32_t now) {
         showSettings(true);
         return;
     }
-    const int direction = directionOf(input.pressed);
+    const int direction = directionOf(input.pressed | input.repeated);
     if (input.pressed & Accept) select(0);
     else if (direction) move(direction);
     else if (input.wheel) move(input.wheel > 0 ? -1 : 1);
@@ -555,8 +563,10 @@ void LauncherUi::handleSettings(const Input& input, uint32_t padButtons) {
     auto* focused = lv_group_get_focused(group);
     const bool dropdown = focused == region || focused == city || focused == audio;
     const bool choosing = dropdown && lv_dropdown_is_open(focused);
-    const bool enter = input.key == 0x28 || input.key == 0x58;
-    const bool backPressed = input.key == 0x29 || (input.pressed & padButtons & Back);
+    const uint8_t key = input.key ? input.key : arrowKey(input.repeated & input.keyboardArrows);
+    const auto padNavigation = (input.pressed | input.repeated) & padButtons;
+    const bool enter = key == 0x28 || key == 0x58;
+    const bool backPressed = key == 0x29 || (input.pressed & padButtons & Back);
     const bool keyboardVisible = !lv_obj_has_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
     if (input.pressed & Menu) {
         showSettings(false);
@@ -571,9 +581,8 @@ void LauncherUi::handleSettings(const Input& input, uint32_t padButtons) {
 
     const bool selectPressed = enter || (!keyboardVisible && (input.pressed & padButtons & Accept));
     if (!keyboardVisible) {
-        const auto pressed = input.pressed & padButtons;
-        const bool left = input.key == 0x50 || (pressed & Left);
-        const bool right = input.key == 0x4f || (pressed & Right);
+        const bool left = key == 0x50 || (padNavigation & Left);
+        const bool right = key == 0x4f || (padNavigation & Right);
         if (left != right) {
             for (const auto& control : volumeControls) {
                 if (focused != control.slider) continue;
@@ -583,10 +592,10 @@ void LauncherUi::handleSettings(const Input& input, uint32_t padButtons) {
             }
         }
     }
-    int direction = keyboardVisible ? 0 : directionOf(input.pressed & padButtons);
-    if (input.key == 0x52 || (!textField && input.key == 0x50)) direction = -1;
-    if (input.key == 0x51 || (!textField && input.key == 0x4f)) direction = 1;
-    if (input.key == 0x2b) {
+    int direction = keyboardVisible ? 0 : directionOf(padNavigation);
+    if (key == 0x52 || (!textField && key == 0x50)) direction = -1;
+    if (key == 0x51 || (!textField && key == 0x4f)) direction = 1;
+    if (key == 0x2b) {
         if (choosing) sendKey(focused, LV_KEY_ESC);
         edit(nullptr, false);
         lv_group_focus_next(group);
@@ -605,15 +614,15 @@ void LauncherUi::handleSettings(const Input& input, uint32_t padButtons) {
     }
 
     const bool isTextField = focused == fields[0] || focused == fields[1];
-    if (isTextField && (input.text || input.key == 0x2a || input.key == 0x4c)) {
+    if (isTextField && (input.text || key == 0x2a || key == 0x4c)) {
         if (textField != focused) edit(focused, false);
         if (input.text) lv_textarea_add_char(focused, input.text);
-        if (input.key == 0x2a) lv_textarea_del_char(focused);
-        if (input.key == 0x4c) lv_textarea_del_char_forward(focused);
+        if (key == 0x2a) lv_textarea_del_char(focused);
+        if (key == 0x4c) lv_textarea_del_char_forward(focused);
     }
     if (isTextField && textField == focused) {
-        if (input.key == 0x50) lv_textarea_cursor_left(focused);
-        if (input.key == 0x4f) lv_textarea_cursor_right(focused);
+        if (key == 0x50) lv_textarea_cursor_left(focused);
+        if (key == 0x4f) lv_textarea_cursor_right(focused);
     }
     if (!selectPressed) return;
     if (dropdown) {

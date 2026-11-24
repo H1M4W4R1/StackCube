@@ -1,6 +1,7 @@
 #include "GameRuntime.h"
 
 #include <SD.h>
+#include <StackCubeDinPorts.h>
 #include <StackCubeHal.h>
 #include <cstring>
 #include <memory>
@@ -24,8 +25,8 @@ void endDraw() {
     drawing = false;
 }
 
-const abi::ServicesV1 services{
-    abi::Version1, sizeof(abi::ServicesV1),
+constexpr abi::ServicesV1 baseServices{
+    abi::Version1, sizeof(abi::ServicesV2),
     []() -> uint32_t { return millis(); }, esp_random,
     [](uint32_t ms) { delay(ms); },
     beginDraw, endDraw,
@@ -57,6 +58,12 @@ const abi::ServicesV1 services{
     [](const char* name) -> uint8_t { return hal::playBgTrack(name); },
     hal::stopBgTrack,
 };
+
+constexpr abi::ServicesV2 services{baseServices, {
+    hal::din::gpioMode, hal::din::gpioRead, hal::din::gpioWrite,
+    hal::din::uartBegin, hal::din::uartRead, hal::din::uartWrite,
+    hal::din::i2cBegin, hal::din::i2cTransfer, hal::din::end,
+}};
 
 esp_elf_symbol_table_t imports[] = {
     ESP_ELFSYM_EXPORT(memcpy), ESP_ELFSYM_EXPORT(memmove),
@@ -97,7 +104,7 @@ bool GameRuntime::start(const char* path, const stackcube::GameLaunch& launch) {
     image.reset();
     if (result) return fail("Could not load game module", result);
 
-    stackcube::abi::LaunchV1 request{&services, {}};
+    stackcube::abi::LaunchV1 request{&services.v1, {}};
     char* arguments[] = {reinterpret_cast<char*>(&request), nullptr};
     result = esp_elf_request(&elf, 0, 1, arguments);
     if (result || !request.game.start || !request.game.tick) {
@@ -105,7 +112,7 @@ bool GameRuntime::start(const char* path, const stackcube::GameLaunch& launch) {
     }
 
     game = request.game;
-    Serial.printf("Launching %s with game ABI %u\n", path, unsigned(services.version));
+    Serial.printf("Launching %s with game ABI %u\n", path, unsigned(services.v1.version));
     stackcube::hal::beginGameAudio(launch);
     game.start();
     endDraw();
@@ -114,8 +121,8 @@ bool GameRuntime::start(const char* path, const stackcube::GameLaunch& launch) {
 
 void GameRuntime::poll(const stackcube::Input& input) {
     if (!active()) return;
-    const auto frame = snapshot(input);
-    const bool keepPlaying = game.tick(&frame);
+    const abi::InputV2 frame{snapshot(input), input.repeated};
+    const bool keepPlaying = game.tick(&frame.v1);
     endDraw();
     if (!keepPlaying) stop();
 }
@@ -124,12 +131,14 @@ void GameRuntime::stop() {
     game = {};
     esp_elf_deinit(&elf);
     endDraw();
+    stackcube::hal::din::endAll();
     stackcube::hal::stopRumble();
     stackcube::hal::endGameAudio();
 }
 
 bool GameRuntime::fail(const char* message, int result) {
     esp_elf_deinit(&elf);
+    stackcube::hal::din::endAll();
     failure = message;
     Serial.printf("%s (%d)\n", message, result);
     return false;

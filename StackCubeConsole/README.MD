@@ -50,7 +50,7 @@ Legacy `game.bin` images use the 4 MiB game partition and reboot into their bund
 
 ## Settings
 
-Select **Settings** after the last game in the carousel. F2 and the controller's Start/Menu button also open it. Each D-pad tap moves one step in the carousel, between settings controls, or through an open drop-down. The arrow keys also navigate. A or Enter activates the focused control. Select a Wi-Fi text field to open the on-screen keyboard. A controller moves the pointer while that keyboard is open.
+Select **Settings** after the last game in the carousel. F2 and the controller's Start/Menu button also open it. Tap a D-pad direction or arrow key to move one step in the carousel, between settings controls, or through an open drop-down. Hold the direction to repeat. A or Enter activates the focused control. Select a Wi-Fi text field to open the on-screen keyboard. A controller moves the pointer while that keyboard is open.
 
 Set the Wi-Fi SSID and password, select a region and city (for example, **Europe** and **Warsaw**), then select **Save**. Leave the SSID blank to disable Wi-Fi. The time-zone list uses the IANA 2026f database and includes daylight saving rules.
 

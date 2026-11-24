@@ -29,6 +29,8 @@ struct Input {
     bool mouseConnected = false;
     Gamepad pads[4];
     bool keyboardConnected = false;
+    uint32_t repeated = 0;
+    uint32_t keyboardArrows = 0;
 };
 
 }

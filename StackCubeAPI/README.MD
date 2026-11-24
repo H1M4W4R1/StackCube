@@ -8,17 +8,49 @@ pio run -d Games/StackCubeBasicExample
 
 Define `setup()` and `loop()`. The launcher calls `setup()` once per launch and calls `loop()` with a fresh input snapshot. Call `Console::begin()` during setup, then read the current snapshot with `Console::poll()`. Draw through `Console::screen()` on the 640 × 360 RGB565 surface. Pair every `startWrite()` with `endWrite()` before calling services that access USB or SD. Use `Console::millis()`, `Console::random()`, and `Console::sleep()` for timing and randomness.
 
-`Input::held` and `Input::pressed` provide logical buttons across keyboards and controllers. `Input::pads` exposes four per-device slots with buttons and normalized axes. Positive X points right and positive Y points down. The input snapshot also includes the latest new keyboard HID key and US-layout text character, plus relative mouse motion, wheel delta, and button state.
+Logical buttons combine input from keyboards and controllers. `Input::held` contains the buttons down on every frame. `Input::pressed` contains the new presses. For an action that should repeat at a steady rate, use `input.pressed | input.repeated`. A held button first repeats after 350 ms and repeats every 90 ms until release. Each button has its own timer. Use `pressed` for one-shot actions such as exiting.
+
+`Input::pads` exposes four per-device slots with buttons and normalized axes. Positive X points right and positive Y points down. The input snapshot also includes the latest new keyboard HID key and US-layout text character, plus relative mouse motion, wheel delta, and button state.
 
 Call `Console::setRumble(slot, left, right)` after reading input to set the two Xbox controller motors. Use the zero-based `Input::pads` slot and strengths from 0 to 255. Set both strengths to zero to stop rumble. The method returns whether a supported controller was available to receive the request.
 
-Call `Console::returnToLauncher()` and return from `loop()` to exit the game. The console stops game audio and rumble, unloads the module, and redraws the launcher.
+Call `Console::returnToLauncher()` and return from `loop()` to exit the game. The console releases both DIN ports, stops game audio and rumble, unloads the module, and redraws the launcher.
+
+## DIN Base ports
+
+Get a port with `console.port(DinPortId::B)` or `console.port(DinPortId::C)`. Each port can run GPIO, UART, or I²C. Call `end()` before changing protocols on a port. The console also releases the port when the game exits.
+
+| Port | Yellow wire | White wire |
+| --- | --- | --- |
+| B | GPIO9 / UART TX / I²C SDA | GPIO8 / UART RX / I²C SCL |
+| C | GPIO17 / UART TX / I²C SDA | GPIO18 / UART RX / I²C SCL |
+
+Use 3.3 V logic and a common ground. For I²C, use pull-ups to 3.3 V on SDA and SCL. The red wire supplies 5 V. [M5Stack Base DIN pinout](https://docs.m5stack.com/en/base/Base_DIN)
+
+```cpp
+auto portB = console.port(DinPortId::B);
+if (portB.pinMode(DinPin::White, PinMode::InputPullUp)) {
+    const bool buttonDown = portB.digitalRead(DinPin::White) == 0;
+    // Use buttonDown in gameplay. A button wired to ground reads low while held.
+}
+
+auto portC = console.port(DinPortId::C);
+if (portC.beginUart(115200)) {
+    uint8_t bytes[32];
+    const auto count = portC.uartRead(bytes, sizeof(bytes));
+    // Process bytes when count is positive.
+}
+```
+
+- **GPIO** supports input, input pull-up, input pull-down, push-pull output and open-drain output. `digitalRead()` returns `0`, `1`, or `-1` on error. `digitalWrite()` returns whether the write succeeded.
+- **UART** uses 8 data bits, no parity and one stop bit. `uartRead()` and `uartWrite()` return the number of bytes read or queued, `0` when none were transferred, or `-1` on error. Retry partial writes in later frames.
+- **I²C** uses 7-bit controller mode at 10–400 kHz, with 100 kHz as the default. Call `beginI2c()` before `i2cTransfer(address, tx, txSize, rx, rxSize)`. A zero-length side can use `nullptr`. Supplying both buffers performs a write followed by a repeated start and read. A transfer returns `false` on error or timeout. Port B and Port C share one external controller, which the console routes to the selected port for each transfer.
 
 ## Binary compatibility
 
-The SDK links into each game. It binds to the running console through the V1 structures in [`StackCubeAbi.h`](src/StackCubeAbi.h). The console owns the HAL, drivers, and shared SPI bus. Game modules link against the SDK and the listed C runtime imports in `Games/build_game.py`.
+The SDK links into each game. The console owns the HAL, drivers, and shared SPI bus. Game modules link against the SDK and the listed C runtime imports in `Games/build_game.py`.
 
-Keep V1 field layouts, function signatures, and behavior available in future firmware. Add new features in a separate ABI version when the interface needs to change, with a V1 adapter for published games. Verify each release by launching the same previously built `game.elf` on the new firmware and exercising rendering, input, audio, and exit.
+The V2 services and input in [`StackCubeAbi.h`](src/StackCubeAbi.h) extend the V1 structures at the end. The firmware advertises the larger services size through the existing V1 entry point, so published V1 games still use their original layouts and button semantics. On V1 firmware, the newer SDK reports port operations as unavailable and `Input::repeated` is zero. Verify each release by launching the same previously built `game.elf` on the new firmware and exercising rendering, input, audio, and exit.
 
 ## Game audio
 

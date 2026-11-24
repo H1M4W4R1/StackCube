@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace stackcube::abi {
@@ -45,6 +46,32 @@ struct ServicesV1 {
     uint8_t (*playMusic)(const char* name);
     void (*stopMusic)();
 };
+
+struct DinServices {
+    uint8_t (*gpioMode)(uint8_t port, uint8_t pin, uint8_t mode);
+    int32_t (*gpioRead)(uint8_t port, uint8_t pin);
+    uint8_t (*gpioWrite)(uint8_t port, uint8_t pin, uint8_t high);
+    uint8_t (*uartBegin)(uint8_t port, uint32_t baud);
+    int32_t (*uartRead)(uint8_t port, uint8_t* data, uint32_t size);
+    int32_t (*uartWrite)(uint8_t port, const uint8_t* data, uint32_t size);
+    uint8_t (*i2cBegin)(uint8_t port, uint32_t clockHz);
+    uint8_t (*i2cTransfer)(uint8_t port, uint8_t address, const uint8_t* tx, uint32_t txSize,
+                           uint8_t* rx, uint32_t rxSize);
+    void (*end)(uint8_t port);
+};
+
+// Advertised by ServicesV1::size. The V1 entry point and callback signatures stay intact.
+struct ServicesV2 {
+    ServicesV1 v1;
+    DinServices din;
+};
+
+struct InputV2 {
+    InputV1 v1;
+    uint32_t repeated;
+};
+
+static_assert(offsetof(ServicesV2, v1) == 0 && offsetof(InputV2, v1) == 0);
 
 struct GameV1 {
     void (*start)();

@@ -1,4 +1,5 @@
 #include "UsbInput.h"
+#include "ButtonRepeat.h"
 #include "HidGamepad.h"
 
 #include <XBOXONE.h>
@@ -15,6 +16,7 @@ USB host;
 USBHub hub(&host);
 USBHub secondHub(&host);
 Input input;
+ButtonRepeat buttonRepeat;
 bool ready;
 uint32_t retryAt;
 uint32_t stateSince;
@@ -57,6 +59,9 @@ public:
             if (iface.protocol == USB_HID_PROTOCOL_KEYBOARD) {
                 input.keyboardConnected = true;
                 buttons |= iface.held;
+                for (const auto key : iface.keys) {
+                    if (key >= 0x4f && key <= 0x52) input.keyboardArrows |= keyboardButton(key);
+                }
             } else if (iface.protocol == USB_HID_PROTOCOL_MOUSE) {
                 input.mouseConnected = true;
                 input.mouseButtons |= iface.mouseButtons;
@@ -316,6 +321,7 @@ const Input& poll() {
     input.mouseButtons = 0;
     input.mouseConnected = false;
     input.keyboardConnected = false;
+    input.keyboardArrows = 0;
     serviceHost();
 
     const PadSource sources[] = {
@@ -350,6 +356,7 @@ const Input& poll() {
         if (source.state.y > 14500) held |= Down;
     }
     input.pressed = held & ~input.held;
+    input.repeated = buttonRepeat.update(held, input.pressed, millis());
     input.held = held;
     return input;
 }
