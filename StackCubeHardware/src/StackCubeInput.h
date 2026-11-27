@@ -31,6 +31,7 @@ struct Input {
     bool keyboardConnected = false;
     uint32_t repeated = 0;
     uint32_t keyboardArrows = 0;
+    uint8_t keys[32] = {};
 };
 
 }

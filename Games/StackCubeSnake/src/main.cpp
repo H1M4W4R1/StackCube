@@ -28,7 +28,7 @@ uint32_t lastStep;
 bool ready, ended, won;
 
 void drawCell(Point point, uint16_t color) {
-    console.screen().fillRect(LeftEdge + point.x * Cell, TopEdge + point.y * Cell,
+    console.screens().raw().fillRect(LeftEdge + point.x * Cell, TopEdge + point.y * Cell,
                               Cell - 1, Cell - 1, color);
 }
 
@@ -54,7 +54,7 @@ void placeFood() {
 }
 
 void showScore() {
-    auto& screen = console.screen();
+    auto& screen = console.screens().raw();
     screen.fillRect(380, 10, 192, 24, Black);
     screen.setTextColor(White);
     screen.setTextSize(2);
@@ -64,7 +64,7 @@ void showScore() {
 }
 
 void reset() {
-    auto& screen = console.screen();
+    auto& screen = console.screens().raw();
     screen.startWrite();
     screen.fillScreen(Black);
     screen.fillRect(LeftEdge, TopEdge, Columns * Cell, Rows * Cell, Board);
@@ -87,8 +87,8 @@ void reset() {
 
 void endGame() {
     ended = true;
-    if (!won) console.play_sfx("collision.wav");
-    auto& screen = console.screen();
+    if (!won) console.sound().playEffect("collision.wav");
+    auto& screen = console.screens().raw();
     screen.fillRect(172, 138, 296, 94, Black);
     screen.setTextAlign(TextAlign::Center);
     screen.drawString(won ? "Board complete!" : "Game over", 320, 156);
@@ -105,7 +105,7 @@ void step() {
         endGame();
         return;
     }
-    auto& screen = console.screen();
+    auto& screen = console.screens().raw();
     screen.startWrite();
     if (!growing) drawCell(body[length - 1], Board);
     drawCell(body[0], Body);
@@ -115,7 +115,7 @@ void step() {
     drawCell(body[0], Head);
     if (growing) {
         ++score;
-        console.play_sfx("eat.wav");
+        console.sound().playEffect("eat.wav");
         showScore();
         won = length == Columns * Rows;
         if (won) endGame();
@@ -128,15 +128,15 @@ void step() {
 void setup() {
     ready = console.begin();
     if (ready) {
-        console.preload_sfx("eat.wav");
-        console.preload_sfx("collision.wav");
+        console.sound().preloadEffect("eat.wav");
+        console.sound().preloadEffect("collision.wav");
         reset();
-        console.play_bg_track("background.wav");
+        console.sound().playMusic("background.wav");
     }
 }
 
 void loop() {
-    const auto& input = console.poll();
+    const auto& input = console.input().snapshot();
     if (input.pressed & (Back | Menu)) {
         console.returnToLauncher();
         return;

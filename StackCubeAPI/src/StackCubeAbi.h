@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct _lv_obj_t;
+
 namespace stackcube::abi {
 
 constexpr uint32_t Version1 = 1;
@@ -83,13 +85,42 @@ struct ServicesV5 {
     uint8_t (*uartTxIdle)(uint8_t port);
 };
 
+struct ServicesV6 {
+    ServicesV5 v5;
+    uint8_t (*uartConfigureWithPinSwap)(uint8_t port, uint32_t baud, uint8_t dataBits, uint8_t parity,
+                                        uint8_t stopBits, uint8_t swapPins);
+};
+
 struct InputV2 {
     InputV1 v1;
     uint32_t repeated;
 };
 
+struct InputV3 {
+    InputV2 v2;
+    uint8_t keys[32];
+};
+
+struct ServicesV7 {
+    ServicesV6 v6;
+    int32_t (*fileSize)(const char* path);
+    int32_t (*readFile)(const char* path, uint32_t offset, void* output, uint32_t size);
+    bool (*drawImage)(const char* path, int x, int y, int maxWidth, int maxHeight, float scale);
+    void (*drawLine)(int x0, int y0, int x1, int y1, uint16_t color);
+    void (*drawCircle)(int x, int y, int radius, uint16_t color);
+    void (*fillTriangle)(int x0, int y0, int x1, int y1, int x2, int y2, uint16_t color);
+    void (*pushImage)(int x, int y, int width, int height, const uint16_t* pixels, int32_t transparent);
+    void (*drawRoundRect)(int x, int y, int width, int height, int radius, uint16_t color, bool filled);
+    void (*setClip)(int x, int y, int width, int height);
+    void (*clearClip)();
+    _lv_obj_t* (*openUi)();
+    void (*closeUi)();
+    bool (*removeUiWidget)(_lv_obj_t* object);
+};
+
 static_assert(offsetof(ServicesV2, v1) == 0 && offsetof(ServicesV3, v2) == 0 &&
-              offsetof(ServicesV4, v3) == 0 && offsetof(ServicesV5, v4) == 0 && offsetof(InputV2, v1) == 0);
+              offsetof(ServicesV4, v3) == 0 && offsetof(ServicesV5, v4) == 0 &&
+              offsetof(ServicesV6, v5) == 0 && offsetof(InputV2, v1) == 0);
 
 struct GameV1 {
     void (*start)();

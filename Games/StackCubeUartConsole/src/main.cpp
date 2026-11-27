@@ -24,6 +24,7 @@ constexpr uint16_t Amber = 0xfda5;
 constexpr uint8_t Enter = 0x28, Backspace = 0x2a, KeypadEnter = 0x58;
 constexpr uint8_t PortKey = 0x3a, SendModeKey = 0x3c, DisplayModeKey = 0x3d, ClearKey = 0x3e;
 constexpr uint8_t BaudKey = 0x3f, DataBitsKey = 0x40, ParityKey = 0x41, StopBitsKey = 0x42;
+constexpr uint8_t SwapPinsKey = 0x43; // F10
 
 struct Activity {
     uint32_t last;
@@ -131,9 +132,12 @@ void changeUartSetting(uint8_t key, uint32_t now) {
             next.stopBits = next.stopBits == UartStopBits::Two ? UartStopBits::One
                 : static_cast<UartStopBits>(static_cast<uint8_t>(next.stopBits) + 1);
             break;
+        case SwapPinsKey:
+            next.swapPins = !next.swapPins;
+            break;
     }
     if (!console.port(portId).beginUart(next)) {
-        setMessage("UART setting unavailable");
+        setMessage(key == SwapPinsKey ? "RX/TX swap unavailable" : "UART setting unavailable");
         return;
     }
     uartSettings = next;
@@ -173,7 +177,7 @@ char keyboardCharacter(const Input& input) {
 }
 
 void handleKey(const Input& input, uint32_t now) {
-    if (input.key >= BaudKey && input.key <= StopBitsKey) {
+    if (input.key >= BaudKey && input.key <= SwapPinsKey) {
         changeUartSetting(input.key, now);
         return;
     }
@@ -251,8 +255,9 @@ void drawSettings() {
     char settings[40];
     constexpr char ParityNames[] = "NEO";
     constexpr char StopBitNames[][4] = {"1", "1.5", "2"};
-    std::snprintf(settings, sizeof(settings), "Port %c  /  %lu %u%c%s%s", portId == DinPortId::B ? 'B' : 'C',
-                  static_cast<unsigned long>(uartSettings.baud), static_cast<unsigned>(uartSettings.dataBits),
+    std::snprintf(settings, sizeof(settings), "Port %c  /  %lu %u%c%s%s",
+                  portId == DinPortId::B ? 'B' : 'C', static_cast<unsigned long>(uartSettings.baud),
+                  static_cast<unsigned>(uartSettings.dataBits),
                   ParityNames[static_cast<uint8_t>(uartSettings.parity)],
                   StopBitNames[static_cast<uint8_t>(uartSettings.stopBits)], portOpen ? "" : "  /  CLOSED");
     label(settings, Margin, 52, portOpen ? Muted : Amber);
@@ -271,6 +276,12 @@ void drawEditor() {
     screen.fillRect(Margin + CharacterWidth * draftLength, 317, 5, 1, Mint);
 }
 
+void drawWireDot(int x, uint16_t color, bool active) {
+    auto& screen = console.screen();
+    screen.fillCircle(x, 21, 6, active ? color : Panel);
+    if (!active) screen.fillCircle(x, 21, 4, color);
+}
+
 void draw(uint32_t now) {
     const bool rxChanged = rx.update(now);
     const bool txChanged = tx.update(now);
@@ -280,8 +291,10 @@ void draw(uint32_t now) {
     auto& screen = console.screen();
     screen.startWrite();
     if (settingsDirty) drawSettings();
-    if (rxChanged) screen.fillCircle(548, 21, 4, rx.active ? Mint : Line);
-    if (txChanged) screen.fillCircle(612, 21, 4, tx.active ? Amber : Line);
+    const uint16_t rxWire = uartSettings.swapPins ? Yellow : White;
+    const uint16_t txWire = uartSettings.swapPins ? White : Yellow;
+    if (settingsDirty || rxChanged) drawWireDot(548, portOpen ? rxWire : Line, rx.active);
+    if (settingsDirty || txChanged) drawWireDot(612, portOpen ? txWire : Line, tx.active);
     if (drawLog) {
         receiveLog.draw(screen, displayFormat);
         lastLogDraw = now;
@@ -306,10 +319,8 @@ void setup() {
     label("UART Console", 16, 14, White, 2);
     label("RX", 524, 17, Muted);
     label("TX", 588, 17, Muted);
-    screen.fillCircle(548, 21, 4, Line);
-    screen.fillCircle(612, 21, 4, Line);
     label("F1 Port   F3 Send mode   F4 Display mode   F5 Clear RX   Enter Send   Esc Exit", Margin, 334, Muted);
-    label("F6 Baud   F7 Data bits   F8 Parity         F9 Stop bits", Margin, 347, Muted);
+    label("F6 Baud   F7 Data bits   F8 Parity         F9 Stop bits  F10 Swap RX/TX", Margin, 347, Muted);
     screen.endWrite();
     editorDirty = true;
     draw(now);

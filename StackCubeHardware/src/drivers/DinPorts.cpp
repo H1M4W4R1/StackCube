@@ -30,6 +30,7 @@ struct Port {
     Protocol protocol = Protocol::Closed;
     uint8_t modes[2] = {Unconfigured, Unconfigured};
     uint32_t clockHz = 0;
+    bool uartPinsSwapped = false;
 };
 
 Port ports[] = {
@@ -51,6 +52,13 @@ void resetPins(const Port& port) {
         gpio_reset_pin(pin);
         gpio_set_pull_mode(pin, GPIO_FLOATING);
     }
+}
+
+bool routeUart(const Port& port, bool swapped) {
+    // Disconnect the previous TX output before driving the new pin.
+    resetPins(port);
+    return uart_set_pin(port.uart, port.pins[swapped ? White : Yellow], port.pins[swapped ? Yellow : White],
+                       UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) == ESP_OK;
 }
 
 void releaseI2c() {
@@ -114,10 +122,16 @@ uint8_t uartBegin(uint8_t id, uint32_t baud) {
 }
 
 uint8_t uartConfigure(uint8_t id, uint32_t baud, uint8_t dataBits, uint8_t parity, uint8_t stopBits) {
+    return uartConfigureWithPinSwap(id, baud, dataBits, parity, stopBits, false);
+}
+
+uint8_t uartConfigureWithPinSwap(uint8_t id, uint32_t baud, uint8_t dataBits, uint8_t parity,
+                                 uint8_t stopBits, uint8_t swapPins) {
     auto* port = getPort(id);
     if (!canUse(port, Protocol::Uart) || !baud || baud > UART_BITRATE_MAX || dataBits < 5 || dataBits > 8 ||
         parity >= sizeof(UartParities) / sizeof(*UartParities) ||
         stopBits >= sizeof(UartStopBits) / sizeof(*UartStopBits)) return false;
+    const bool swapped = swapPins != 0;
 
     uart_config_t config{};
     config.baud_rate = baud;
@@ -129,16 +143,22 @@ uint8_t uartConfigure(uint8_t id, uint32_t baud, uint8_t dataBits, uint8_t parit
 
     const auto uart = port->uart;
     if (port->protocol == Protocol::Uart) {
-        return uartTxIdle(id) && uart_param_config(uart, &config) == ESP_OK;
+        if (!uartTxIdle(id)) return false;
+        if (port->uartPinsSwapped == swapped) return uart_param_config(uart, &config) == ESP_OK;
+        if (!routeUart(*port, swapped) || uart_param_config(uart, &config) != ESP_OK) {
+            routeUart(*port, port->uartPinsSwapped);
+            return false;
+        }
+    } else {
+        if (uart_is_driver_installed(uart) || uart_driver_install(uart, 512, 0, 0, nullptr, 0) != ESP_OK) return false;
+        if (uart_param_config(uart, &config) != ESP_OK || !routeUart(*port, swapped)) {
+            uart_driver_delete(uart);
+            resetPins(*port);
+            return false;
+        }
+        port->protocol = Protocol::Uart;
     }
-    if (uart_is_driver_installed(uart) || uart_driver_install(uart, 512, 0, 0, nullptr, 0) != ESP_OK) return false;
-    if (uart_param_config(uart, &config) != ESP_OK ||
-        uart_set_pin(uart, port->pins[Yellow], port->pins[White], UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK) {
-        uart_driver_delete(uart);
-        resetPins(*port);
-        return false;
-    }
-    port->protocol = Protocol::Uart;
+    port->uartPinsSwapped = swapped;
     return true;
 }
 
@@ -200,6 +220,7 @@ void end(uint8_t id) {
     port->protocol = Protocol::Closed;
     port->modes[Yellow] = port->modes[White] = Unconfigured;
     port->clockHz = 0;
+    port->uartPinsSwapped = false;
 }
 
 void endAll() {

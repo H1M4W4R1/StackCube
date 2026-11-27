@@ -2,11 +2,11 @@
 
 Run `pio run -d Games/StackCubeUartConsole` from the repository root to build the CoreS3 module. To install it alongside the other SD apps, follow the [microSD preparation guide](../README.MD). The launcher lists it as **UART Console**.
 
-Connect a USB keyboard and wire the selected DINBase port for 3.3 V UART with a common ground. Yellow is StackCube TX, and white is StackCube RX. The console starts on Port B at **115200 baud, 8N1**.
+Connect a USB keyboard and wire the selected DINBase port for 3.3 V UART with a common ground. The console starts on Port B at **115200 baud, 8N1**, with yellow as StackCube TX and white as RX.
 
 ### UART settings
 
-Press each key to cycle its setting. The active settings appear above the receive view and follow you when switching ports. Data bits, parity, and stop bits require the [current console firmware](../../StackCubeConsole/README.MD).
+Press each key to cycle its setting. The current settings follow you when switching ports. F10 requires the [console firmware with V6 game services](../../StackCubeConsole/README.MD).
 
 | Key | Setting | Values |
 | --- | --- | --- |
@@ -14,6 +14,9 @@ Press each key to cycle its setting. The active settings appear above the receiv
 | F7 | Data bits | 5, 6, 7, 8 |
 | F8 | Parity | None, even, odd |
 | F9 | Stop bits | 1, 1.5, 2 |
+| F10 | Swap RX/TX pins | TX yellow / RX white ↔ TX white / RX yellow |
+
+If your target needs the swapped mapping, select **TX White / RX Yellow** before connecting it. If F10 displays **TX busy**, wait for the current transmission to finish and press it again.
 
 ### Console controls
 
@@ -32,4 +35,4 @@ Press each key to cycle its setting. The active settings appear above the receiv
 | HEX | Type byte pairs with optional spaces between pairs, such as `48 69 0D 0A`. | Two uppercase hex digits per byte. |
 | DEC LE / DEC BE | Type unsigned integers from `0` to `4294967295`, separated by spaces. Each sends four bytes in the selected byte order. | Unsigned 32-bit words starting at the first byte after opening or clearing the port view. Any trailing bytes appear in hex frames until a full word arrives. |
 
-The receive view follows the latest data. The header dots flash on received bytes (RX) and bytes accepted for transmission (TX).
+The receive view follows the latest data. The RX and TX dots show their assigned wire colors and grow briefly as bytes arrive or are accepted for transmission.

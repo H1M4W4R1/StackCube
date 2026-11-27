@@ -69,8 +69,10 @@ public:
                 input.keyboardConnected = true;
                 buttons |= iface.held;
                 for (const auto key : iface.keys) {
+                    if (key) input.keys[key / 8] |= 1u << (key % 8);
                     if (key >= 0x4f && key <= 0x52) input.keyboardArrows |= keyboardButton(key);
                 }
+                input.keys[28] |= iface.modifiers;
             } else if (iface.protocol == USB_HID_PROTOCOL_MOUSE) {
                 input.mouseConnected = true;
                 input.mouseButtons |= iface.mouseButtons;
@@ -85,6 +87,7 @@ private:
     struct Interface {
         uint8_t endpoint = 0, protocol = 0;
         uint8_t keys[6] = {};
+        uint8_t modifiers = 0;
         uint8_t mouseButtons = 0;
         uint32_t held = 0;
         HidGamepad descriptor;
@@ -117,6 +120,7 @@ private:
             if (iface.protocol == USB_HID_PROTOCOL_KEYBOARD && length >= 8) {
                 for (uint8_t i = 2; i < 8; ++i) if (data[i] && data[i] < 4) return;
                 iface.held = 0;
+                iface.modifiers = data[0];
                 for (uint8_t i = 2; i < 8; ++i) {
                     const uint8_t key = data[i];
                     iface.held |= keyboardButton(key);
@@ -332,6 +336,7 @@ const Input& poll() {
     input.mouseConnected = false;
     input.keyboardConnected = false;
     input.keyboardArrows = 0;
+    std::fill(std::begin(input.keys), std::end(input.keys), 0);
     serviceHost();
 
     const PadSource sources[] = {
